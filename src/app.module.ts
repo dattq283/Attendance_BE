@@ -8,21 +8,27 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { AttendanceRequestModule } from './attendance-request/attendance-request.module';
+import { PrismaService } from '../prisma/prisma.service';
+import { PrismaModule } from '../prisma/prisma.module';
+import { PassportModule } from '@nestjs/passport';
+import { AppResolver } from './app.resolver';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    PassportModule,
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
       autoSchemaFile: 'schema.sql',
       sortSchema: true,
       playground: true,
     }),
+    PrismaModule,
     AuthModule,
     UserModule,
     AttendanceModule,
     AttendanceRequestModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, PrismaService, AppResolver],
 })
 export class AppModule {}
