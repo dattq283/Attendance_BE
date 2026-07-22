@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client"
+  output = "../src/generated"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum RequestStatus {
+  APPROVED
+  REJECTED
+  PENDING
+}
+
+enum AttendanceType {
+  NORMAL
+  MANUAL
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  fullName     String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(EMPLOYEE)
+  createdAt    DateTime  @default(now())
+  attendances Attendance[]
+  requests    AttendanceRequest[] @relation("requestOwner")
+  reviews     AttendanceRequest[] @relation("requestReviewer")
+}
+
+model Attendance {
+  id                 Int                 @id @default(autoincrement())
+  userId             Int
+  user               User                @relation(fields: [userId], references: [id])
+  checkTime          DateTime
+  type               AttendanceType                @default(NORMAL)
+  createdAt          DateTime            @default(now())
+  attendanceRequests AttendanceRequest[]
+
+  @@index([userId, checkTime])
+}
+
+model AttendanceRequest {
+  id           Int           @id @default(autoincrement())
+  userId       Int
+  user         User          @relation("requestOwner", fields: [userId], references: [id])
+  requestTime  DateTime
+  reason       String
+  status       RequestStatus @default(PENDING)
+  reviewBy     Int?
+  reviewer     User?         @relation("requestReviewer", fields: [reviewBy], references: [id])
+  reviewAt     DateTime?
+  note         String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime?     @updatedAt
+  attendance   Attendance?   @relation(fields: [attendanceId], references: [id])
+  attendanceId Int?
+
+  @@index([status])
+  @@index([userId, status])
+}
