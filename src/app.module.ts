@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PassportModule } from '@nestjs/passport';
 import { AppResolver } from './app.resolver';
+import { CaslAbilityFactory } from './casl/casl-ability.factory';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -29,6 +30,6 @@ import { AppResolver } from './app.resolver';
     AttendanceRequestModule,
   ],
   controllers: [AppController],
-  providers: [AppService, PrismaService, AppResolver],
+  providers: [AppService, PrismaService, AppResolver, CaslAbilityFactory],
 })
 export class AppModule {}
