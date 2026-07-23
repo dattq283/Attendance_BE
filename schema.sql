@@ -60,6 +60,7 @@ type Query {
   adminOnly: String!
   checkAttendancePermission: String!
   showHistory(from: DateTime, to: DateTime): [Attendance!]!
+  showRequestList(status: RequestStatus): [AttendanceRequest!]!
 }
 
 input RegisterInput {

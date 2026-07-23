@@ -1,10 +1,13 @@
-import { Mutation, Resolver, Args } from '@nestjs/graphql';
+import { Mutation, Resolver, Args, Query } from '@nestjs/graphql';
 import { AttendanceRequestService } from './attendance-request.service';
 import { UseGuards } from '@nestjs/common';
 import { GqlAuthGuard } from '../auth/gql-auth.guard';
 import { AttendanceRequest } from './attendance-request.entity';
 import { AttendanceRequestInput } from './attendance-request.input';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { PoliciesGuard } from '../casl/policy.guard';
+import { CheckPolicies } from '../casl/check-policy.decorator';
+import { RequestStatus } from '@prisma/client';
 
 @Resolver()
 export class AttendanceRequestResolver {
@@ -17,5 +20,15 @@ export class AttendanceRequestResolver {
     @Args('input') input: AttendanceRequestInput,
   ) {
     return this.attendanceRequestService.createRequest(userId, input);
+  }
+  @UseGuards(GqlAuthGuard, PoliciesGuard)
+  @Query(() => [AttendanceRequest])
+  @CheckPolicies((ability) => ability.can('read', 'AttendanceRequest'))
+  showRequestList(
+    @CurrentUser() user: { userId: number; role: string },
+    @Args('status', { type: () => RequestStatus, nullable: true })
+    status?: RequestStatus,
+  ) {
+    return this.attendanceRequestService.showRequestList(user, status);
   }
 }
