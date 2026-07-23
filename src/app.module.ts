@@ -11,17 +11,18 @@ import { AttendanceRequestModule } from './attendance-request/attendance-request
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PassportModule } from '@nestjs/passport';
-import { AppResolver } from './app.resolver';
 import { CaslAbilityFactory } from './casl/casl-ability.factory';
+import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PassportModule,
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: 'schema.sql',
+      autoSchemaFile: true,
       sortSchema: true,
-      playground: true,
+      playground: false,
+      plugins: [ApolloServerPluginLandingPageLocalDefault()],
     }),
     PrismaModule,
     AuthModule,
@@ -30,6 +31,6 @@ import { CaslAbilityFactory } from './casl/casl-ability.factory';
     AttendanceRequestModule,
   ],
   controllers: [AppController],
-  providers: [AppService, PrismaService, AppResolver, CaslAbilityFactory],
+  providers: [AppService, PrismaService, CaslAbilityFactory],
 })
 export class AppModule {}

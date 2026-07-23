@@ -83,16 +83,27 @@ export class AttendanceRequestService {
     user: { userId: number; role: string },
     note?: string,
   ) {
-    return this.prisma.client.attendanceRequest.update({
-      where: {
-        id: requestId,
-      },
-      data: {
-        status: 'REJECTED',
-        reviewBy: user.userId,
-        reviewAt: new Date(),
-        note,
-      },
+    return this.prisma.client.$transaction(async (tx) => {
+      const request = await tx.attendanceRequest.findUnique({
+        where: { id: requestId },
+      });
+      if (!request) {
+        throw new BadRequestException('Không tìm thấy đơn');
+      }
+      if (request.status !== 'PENDING') {
+        throw new BadRequestException('Đơn đã được xử lý');
+      }
+      return tx.attendanceRequest.update({
+        where: {
+          id: requestId,
+        },
+        data: {
+          status: 'REJECTED',
+          reviewBy: user.userId,
+          reviewAt: new Date(),
+          note,
+        },
+      });
     });
   }
 }
