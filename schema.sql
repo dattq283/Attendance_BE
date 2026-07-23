@@ -39,6 +39,7 @@ type Mutation {
 type Query {
   adminOnly: String!
   checkAttendancePermission: String!
+  showHistory(from: DateTime, to: DateTime): [Attendance!]!
 }
 
 input RegisterInput {
