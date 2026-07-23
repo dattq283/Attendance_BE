@@ -10,6 +10,25 @@ type Attendance {
   userId: ID!
 }
 
+type AttendanceRequest {
+  attendanceId: ID
+  createdAt: DateTime!
+  id: ID!
+  note: String
+  reason: String!
+  requestTime: DateTime!
+  reviewAt: DateTime
+  reviewBy: ID
+  status: RequestStatus!
+  updatedAt: DateTime
+  userId: ID!
+}
+
+input AttendanceRequestInput {
+  reason: String!
+  requestTime: DateTime!
+}
+
 enum AttendanceType {
   MANUAL
   NORMAL
@@ -32,6 +51,7 @@ input LoginInput {
 
 type Mutation {
   checkIn: Attendance!
+  createRequest(input: AttendanceRequestInput!): AttendanceRequest!
   login(input: LoginInput!): AuthResponse!
   register(input: RegisterInput!): AuthResponse!
 }
@@ -46,6 +66,12 @@ input RegisterInput {
   email: String!
   fullName: String!
   password: String!
+}
+
+enum RequestStatus {
+  APPROVED
+  PENDING
+  REJECTED
 }
 
 type User {
