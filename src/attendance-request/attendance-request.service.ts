@@ -43,4 +43,38 @@ export class AttendanceRequestService {
       },
     });
   }
+  async approveRequest(
+    requestId: number,
+    user: { userId: number; role: string },
+  ) {
+    return this.prisma.client.$transaction(async (tx) => {
+      const request = await tx.attendanceRequest.findUnique({
+        where: { id: requestId },
+      });
+      if (!request) {
+        throw new BadRequestException('Không tìm thấy đơn');
+      }
+      if (request.status !== 'PENDING') {
+        throw new BadRequestException('Đơn đã được xử lý');
+      }
+
+      const attendance = await tx.attendance.create({
+        data: {
+          userId: request.userId,
+          checkTime: request.requestTime,
+          type: 'MANUAL',
+        },
+      });
+
+      return tx.attendanceRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'APPROVED',
+          reviewBy: user.userId,
+          reviewAt: new Date(),
+          attendanceId: attendance.id,
+        },
+      });
+    });
+  }
 }

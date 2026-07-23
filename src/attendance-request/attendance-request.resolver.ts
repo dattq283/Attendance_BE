@@ -21,6 +21,7 @@ export class AttendanceRequestResolver {
   ) {
     return this.attendanceRequestService.createRequest(userId, input);
   }
+
   @UseGuards(GqlAuthGuard, PoliciesGuard)
   @Query(() => [AttendanceRequest])
   @CheckPolicies((ability) => ability.can('read', 'AttendanceRequest'))
@@ -30,5 +31,15 @@ export class AttendanceRequestResolver {
     status?: RequestStatus,
   ) {
     return this.attendanceRequestService.showRequestList(user, status);
+  }
+
+  @UseGuards(GqlAuthGuard, PoliciesGuard)
+  @Mutation(() => AttendanceRequest)
+  @CheckPolicies((ability) => ability.can('update', 'AttendanceRequest'))
+  approveRequest(
+    @CurrentUser() user: { userId: number; role: string },
+    @Args('requestId') requestId: number,
+  ) {
+    return this.attendanceRequestService.approveRequest(requestId, user);
   }
 }

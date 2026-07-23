@@ -50,6 +50,7 @@ input LoginInput {
 }
 
 type Mutation {
+  approveRequest(requestId: Float!): AttendanceRequest!
   checkIn: Attendance!
   createRequest(input: AttendanceRequestInput!): AttendanceRequest!
   login(input: LoginInput!): AuthResponse!
