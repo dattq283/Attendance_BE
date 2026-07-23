@@ -77,4 +77,22 @@ export class AttendanceRequestService {
       });
     });
   }
+
+  async rejectRequest(
+    requestId: number,
+    user: { userId: number; role: string },
+    note?: string,
+  ) {
+    return this.prisma.client.attendanceRequest.update({
+      where: {
+        id: requestId,
+      },
+      data: {
+        status: 'REJECTED',
+        reviewBy: user.userId,
+        reviewAt: new Date(),
+        note,
+      },
+    });
+  }
 }

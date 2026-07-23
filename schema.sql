@@ -55,6 +55,7 @@ type Mutation {
   createRequest(input: AttendanceRequestInput!): AttendanceRequest!
   login(input: LoginInput!): AuthResponse!
   register(input: RegisterInput!): AuthResponse!
+  rejectRequest(note: String, requestId: Float!): AttendanceRequest!
 }
 
 type Query {

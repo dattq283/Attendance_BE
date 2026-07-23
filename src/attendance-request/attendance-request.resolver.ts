@@ -42,4 +42,15 @@ export class AttendanceRequestResolver {
   ) {
     return this.attendanceRequestService.approveRequest(requestId, user);
   }
+
+  @UseGuards(GqlAuthGuard, PoliciesGuard)
+  @Mutation(() => AttendanceRequest)
+  @CheckPolicies((ability) => ability.can('update', 'AttendanceRequest'))
+  rejectRequest(
+    @CurrentUser() user: { userId: number; role: string },
+    @Args('requestId') requestId: number,
+    @Args('note', { nullable: true }) note?: string,
+  ) {
+    return this.attendanceRequestService.rejectRequest(requestId, user, note);
+  }
 }
