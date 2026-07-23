@@ -2,6 +2,19 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type Attendance {
+  checkTime: DateTime!
+  createdAt: DateTime!
+  id: ID!
+  type: AttendanceType!
+  userId: ID!
+}
+
+enum AttendanceType {
+  MANUAL
+  NORMAL
+}
+
 type AuthResponse {
   accessToken: String!
   user: User!
@@ -18,12 +31,14 @@ input LoginInput {
 }
 
 type Mutation {
+  checkIn: Attendance!
   login(input: LoginInput!): AuthResponse!
   register(input: RegisterInput!): AuthResponse!
 }
 
 type Query {
-  pong: String!
+  adminOnly: String!
+  checkAttendancePermission: String!
 }
 
 input RegisterInput {
