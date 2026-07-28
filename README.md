@@ -24,7 +24,7 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
 | ORM | Prisma 6 |
 | Database | MySQL |
 | Xác thực | JWT (Passport) |
-| Phân quyền | CASL (`@casl/ability`, `@casl/prisma`) + Role-based Guard |
+| Phân quyền | CASL (`@casl/ability`, `@casl/prisma`) |
 | Validate | class-validator |
 | Hash password | bcrypt |
 
