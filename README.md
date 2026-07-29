@@ -1,104 +1,50 @@
-# Attendance System — Backend
+<p align="center">
+  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
+</p>
 
-Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + Prisma + MySQL**, áp dụng phân quyền theo **CASL** (field-level authorization) kết hợp **Role-based Guard** cho các trường hợp đơn giản.
+[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
+[circleci-url]: https://circleci.com/gh/nestjs/nest
 
-## Mục lục
+  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
+    <p align="center">
+<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
+<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
+<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
+<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
+<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
+<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
+<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
+  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
+    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
+  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
+</p>
+  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
+  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-- [Công nghệ sử dụng](#công-nghệ-sử-dụng)
-- [Kiến trúc tổng quan](#kiến-trúc-tổng-quan)
-- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
-- [Schema Database](#schema-database)
-- [Cài đặt & Chạy dự án](#cài-đặt--chạy-dự-án)
-- [Xác thực & Phân quyền](#xác-thực--phân-quyền)
-- [Danh sách API](#danh-sách-api)
-- [Luồng nghiệp vụ chính](#luồng-nghiệp-vụ-chính)
+## Description
 
----
+[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
-## Công nghệ sử dụng
+## Project setup
 
-| Thành phần | Công nghệ |
-|---|---|
-| Framework | NestJS |
-| API | GraphQL (Apollo Server, code-first) |
-| ORM | Prisma 6 |
-| Database | MySQL |
-| Xác thực | JWT (Passport) |
-| Phân quyền | CASL (`@casl/ability`, `@casl/prisma`) |
-| Validate | class-validator |
-| Hash password | bcrypt |
+```bash
+$ npm install
+```
 
-## Kiến trúc tổng quan
+## Compile and run the project
 
-**Luồng xử lý 1 request:**
+```bash
+# development
+$ npm run start
 
-1. Client gửi GraphQL query/mutation qua `POST /graphql`
-2. `GqlAuthGuard` — xác thực JWT, gắn thông tin user vào request
-3. `PoliciesGuard` / `RolesGuard` — kiểm tra quyền truy cập (tùy từng API)
-4. `Resolver` — nhận request, gọi xuống Service tương ứng
-5. `Service` — xử lý logic nghiệp vụ, gọi Prisma
-6. `PrismaService` — thực thi truy vấn xuống MySQL
+# watch mode
+$ npm run start:dev
 
+# production mode
+$ npm run start:prod
+```
 
-Ứng dụng tổ chức theo **feature-based module** (mỗi tính năng 1 thư mục riêng, tự chứa entity/service/resolver), không gộp theo layer kỹ thuật — giúp dễ mở rộng và dễ tra cứu khi dự án lớn dần.
-
-## Cấu trúc thư mục
-
-- `src/`
-  - `auth/` — Đăng ký, đăng nhập, JWT
-    - `auth.module.ts`
-    - `auth.service.ts`
-    - `auth.resolver.ts`
-    - `jwt.strategy.ts`
-    - `gql-auth.guard.ts`
-    - `current-user.decorator.ts`
-    - `roles.decorator.ts`, `roles.guard.ts`
-    - `dto/`, `entities/`
-  - `casl/` — Phân quyền field-level dùng chung nhiều module
-    - `casl.module.ts`
-    - `casl-ability.factory.ts`
-    - `policies.guard.ts`
-    - `check-policies.decorator.ts`
-  - `prisma/` — Kết nối database dùng chung
-    - `prisma.module.ts`
-    - `prisma.service.ts`
-  - `user/`
-  - `attendance/` — Chấm công, xem lịch sử
-    - `attendance.entity.ts`
-    - `attendance.service.ts`
-    - `attendance.resolver.ts`
-  - `attendance-request/` — Đơn xin chấm công ngoài
-    - `attendance-request.entity.ts`
-    - `attendance-request.input.ts`
-    - `attendance-request.service.ts`
-    - `attendance-request.resolver.ts`
-  - `app.module.ts`
-  - `main.ts`
-
-
-## Schema Database
-
-3 bảng chính:
-
-**User** — tài khoản, có `role` (`ADMIN` / `EMPLOYEE`).
-
-**Attendance** — lịch sử chấm công thực tế.
-- `type: NORMAL` — chấm công qua API bình thường
-- `type: MANUAL` — sinh ra tự động khi 1 đơn xin chấm công ngoài được duyệt
-
-**AttendanceRequest** — đơn xin chấm công ngoài.
-- `status: PENDING | APPROVED | REJECTED`
-- Khi `APPROVED`, hệ thống tự tạo 1 bản ghi `Attendance` tương ứng (liên kết qua `attendanceId`), đảm bảo API xem lịch sử chỉ cần truy vấn đúng 1 bảng.
-
-Xem chi tiết đầy đủ tại `prisma/schema.prisma`.
-
-## Cài đặt & Chạy dự án
-
-### Yêu cầu
-- Node.js
-- MySQL đang chạy (local hoặc Docker)
-
-### Các bước
+## Run tests
 
 ```bash
 # Cài dependency
@@ -125,79 +71,35 @@ npm run start:dev
 Đăng ký 1 tài khoản qua mutation `register`, sau đó sửa `role` thành `ADMIN` trực tiếp qua Prisma Studio:
 
 ```bash
-npx prisma studio
+$ npm install -g @nestjs/mau
+$ mau deploy
 ```
 
-## Xác thực & Phân quyền
+With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
 
-### Xác thực (Authentication)
+## Resources
 
-Dùng JWT — sau khi `login`/`register` thành công, client nhận `accessToken`, gửi kèm mọi request cần đăng nhập qua header:
+Check out a few resources that may come in handy when working with NestJS:
 
-Authorization: Bearer <accessToken>
+- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
+- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
+- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
+- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
+- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
+- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
+- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
+- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
 
+## Support
 
-`GqlAuthGuard` chịu trách nhiệm xác thực token và gắn thông tin user (`userId`, `role`) vào request.
+Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
 
-### Phân quyền (Authorization)
+## Stay in touch
 
-Sử dụng cơ chế CASL
-- **`PoliciesGuard` + CASL (`@CheckPolicies(...)`)** — dùng cho các API cần lọc dữ liệu theo điều kiện field-level (ví dụ: EMPLOYEE chỉ được xem lịch sử/đơn của chính mình, ADMIN xem được toàn bộ). CASL rule được định nghĩa tập trung tại `casl-ability.factory.ts`, tự động chuyển thành điều kiện Prisma `where` qua `accessibleBy()`.
+- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
+- Website - [https://nestjs.com](https://nestjs.com/)
+- Twitter - [@nestframework](https://twitter.com/nestframework)
 
-Thêm role mới trong tương lai chỉ cần chỉnh sửa `casl-ability.factory.ts`, không cần sửa Guard.
+## License
 
-## Danh sách API
-
-Toàn bộ API là GraphQL Query/Mutation qua endpoint `/graphql`.
-
-| API | Loại | Yêu cầu | Guard |
-|---|---|---|---|
-| `register` | Mutation | Không cần đăng nhập | — |
-| `login` | Mutation | Không cần đăng nhập | — |
-| `checkin` | Mutation | Đăng nhập | `GqlAuthGuard` |
-| `attendanceHistory(from?, to?)` | Query | Xem lịch sử chấm công (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ) | `GqlAuthGuard`, `PoliciesGuard` |
-| `createRequest(input)` | Mutation | Tạo đơn xin chấm công ngoài | `GqlAuthGuard` |
-| `attendanceRequests(status?)` | Query | Xem đơn xin chấm công ngoài (Chỉ ADMIN mới xem được) | `GqlAuthGuard`, `PoliciesGuard` |
-| `approveRequest(requestId)` | Mutation | Phê duyệt đơn xin chấm công (ADMIN) | `GqlAuthGuard`, `RolesGuard` |
-| `rejectRequest(requestId)` | Mutation | Từ chối đơn xin chấm công ngoài (ADMIN) | `GqlAuthGuard`, `RolesGuard` |
-
-## Luồng nghiệp vụ chính
-
-### Chấm công thông thường
-
-User đăng nhập → checkin() → Attendance (type: NORMAL) được tạo
-
-
-### Xin chấm công ngoài
-
-User → createRequest(requestTime, reason)
-→ AttendanceRequest (status: PENDING) được tạo
-→ validate: requestTime phải là quá khứ
-
-Admin → attendanceRequests(status: PENDING) → xem danh sách chờ duyệt
-
-Admin → approveRequest(requestId)
-→ Transaction:
-1. Kiểm tra đơn đang ở trạng thái PENDING
-2. Tạo Attendance mới (type: MANUAL, checkTime = requestTime của đơn)
-3. Update AttendanceRequest: status = APPROVED, reviewBy, reviewAt, attendanceId
-
-User → attendanceHistory() → thấy bản ghi MANUAL mới xuất hiện
-
---- hoặc ---
-
-Admin → rejectRequest(requestId)
-→ Update AttendanceRequest: status = REJECTED, reviewBy, reviewAt
-→ Không tạo Attendance nào (đơn không được công nhận)
-
-
----
-
-## Trạng thái hoàn thành
-
-- [x] Đăng ký / Đăng nhập (JWT)
-- [x] Chấm công
-- [x] Xem lịch sử chấm công (filter theo thời gian, phân quyền theo role)
-- [x] Tạo đơn xin chấm công ngoài
-- [x] Admin xem danh sách đơn (filter theo trạng thái)
-- [x] Admin duyệt / từ chối đơn
+Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).

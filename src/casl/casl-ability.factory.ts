@@ -22,6 +22,7 @@ export class CaslAbilityFactory {
       can('create', 'all');
       can('read', 'Attendance', { userId: user.userId });
       can('create', 'AttendanceRequest');
+      can('read', 'AttendanceRequest', { userId: user.userId });
     }
     return build({
       detectSubjectType: (object) =>
