@@ -1,6 +1,6 @@
 # Attendance System — Backend
 
-Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + Prisma + MySQL**, áp dụng phân quyền theo **CASL** (field-level authorization) kết hợp **Role-based Guard** cho các trường hợp đơn giản.
+Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + Prisma + MySQL**, áp dụng phân quyền theo **CASL** (field-level authorization) kết hợp **Role-based Guard** cho các trường hợp đơn giản. Đang bổ sung thông báo **real-time qua WebSocket** cho các thao tác duyệt/từ chối đơn.
 
 ## Mục lục
 
@@ -12,6 +12,7 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
 - [Xác thực & Phân quyền](#xác-thực--phân-quyền)
 - [Danh sách API](#danh-sách-api)
 - [Luồng nghiệp vụ chính](#luồng-nghiệp-vụ-chính)
+- [Thông báo Real-time (WebSocket)](#thông-báo-real-time-websocket)
 
 ---
 
@@ -24,21 +25,22 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
 | ORM | Prisma 6 |
 | Database | MySQL |
 | Xác thực | JWT (Passport) |
-| Phân quyền | CASL (`@casl/ability`, `@casl/prisma`) |
+| Phân quyền | CASL (`@casl/ability`, `@casl/prisma`) + Role-based Guard |
+| Real-time | Socket.io (NestJS Gateway) |
 | Validate | class-validator |
 | Hash password | bcrypt |
 
 ## Kiến trúc tổng quan
 
-**Luồng xử lý 1 request:**
+**Luồng xử lý 1 request GraphQL:**
 
 1. Client gửi GraphQL query/mutation qua `POST /graphql`
 2. `GqlAuthGuard` — xác thực JWT, gắn thông tin user vào request
-3. `PoliciesGuard` / `RolesGuard` — kiểm tra quyền truy cập (tùy từng API)
+3. `PoliciesGuard` (CASL)  — kiểm tra quyền truy cập (tùy từng API)
 4. `Resolver` — nhận request, gọi xuống Service tương ứng
 5. `Service` — xử lý logic nghiệp vụ, gọi Prisma
 6. `PrismaService` — thực thi truy vấn xuống MySQL
-
+7. (Với `approveRequest`/`rejectRequest`) Service gọi thêm `NotificationGateway` để bắn sự kiện real-time cho đúng user liên quan
 
 Ứng dụng tổ chức theo **feature-based module** (mỗi tính năng 1 thư mục riêng, tự chứa entity/service/resolver), không gộp theo layer kỹ thuật — giúp dễ mở rộng và dễ tra cứu khi dự án lớn dần.
 
@@ -52,7 +54,6 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
     - `jwt.strategy.ts`
     - `gql-auth.guard.ts`
     - `current-user.decorator.ts`
-    - `roles.decorator.ts`, `roles.guard.ts`
     - `dto/`, `entities/`
   - `casl/` — Phân quyền field-level dùng chung nhiều module
     - `casl.module.ts`
@@ -62,6 +63,9 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
   - `prisma/` — Kết nối database dùng chung
     - `prisma.module.ts`
     - `prisma.service.ts`
+  - `notification/` — Gateway WebSocket, bắn sự kiện real-time
+    - `notification.module.ts`
+    - `notification.gateway.ts`
   - `user/`
   - `attendance/` — Chấm công, xem lịch sử
     - `attendance.entity.ts`
@@ -74,7 +78,6 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
     - `attendance-request.resolver.ts`
   - `app.module.ts`
   - `main.ts`
-
 
 ## Schema Database
 
@@ -118,7 +121,7 @@ npx prisma generate
 npm run start:dev
 ```
 
-Ứng dụng chạy tại `http://localhost:3000/graphql` (Apollo Sandbox).
+Ứng dụng chạy tại `http://localhost:3000/graphql` (Apollo Sandbox). Kết nối WebSocket qua cùng port `3000`.
 
 ### Tạo tài khoản ADMIN
 
@@ -137,11 +140,10 @@ Dùng JWT — sau khi `login`/`register` thành công, client nhận `accessToke
 Authorization: Bearer <accessToken>
 
 
-`GqlAuthGuard` chịu trách nhiệm xác thực token và gắn thông tin user (`userId`, `role`) vào request.
+`GqlAuthGuard` chịu trách nhiệm xác thực token và gắn thông tin user (`userId`, `role`) vào request. Cùng 1 `accessToken` này cũng được dùng để xác thực kết nối WebSocket (xem phần [Thông báo Real-time](#thông-báo-real-time-websocket)).
 
 ### Phân quyền (Authorization)
 
-Sử dụng cơ chế CASL
 - **`PoliciesGuard` + CASL (`@CheckPolicies(...)`)** — dùng cho các API cần lọc dữ liệu theo điều kiện field-level (ví dụ: EMPLOYEE chỉ được xem lịch sử/đơn của chính mình, ADMIN xem được toàn bộ). CASL rule được định nghĩa tập trung tại `casl-ability.factory.ts`, tự động chuyển thành điều kiện Prisma `where` qua `accessibleBy()`.
 
 Thêm role mới trong tương lai chỉ cần chỉnh sửa `casl-ability.factory.ts`, không cần sửa Guard.
@@ -157,9 +159,10 @@ Toàn bộ API là GraphQL Query/Mutation qua endpoint `/graphql`.
 | `checkin` | Mutation | Đăng nhập | `GqlAuthGuard` |
 | `attendanceHistory(from?, to?)` | Query | Xem lịch sử chấm công (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ) | `GqlAuthGuard`, `PoliciesGuard` |
 | `createRequest(input)` | Mutation | Tạo đơn xin chấm công ngoài | `GqlAuthGuard` |
-| `attendanceRequests(status?)` | Query | Xem đơn xin chấm công ngoài (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ)  | `GqlAuthGuard`, `PoliciesGuard` |
-| `approveRequest(requestId)` | Mutation | Phê duyệt đơn xin chấm công (ADMIN) | `GqlAuthGuard` |
-| `rejectRequest(requestId)` | Mutation | Từ chối đơn xin chấm công ngoài (ADMIN) | `GqlAuthGuard` |
+| `myAttendanceRequests` | Query | Xem đơn xin chấm công ngoài của chính mình | `GqlAuthGuard` |
+| `attendanceRequests(status?)` | Query | Xem đơn xin chấm công ngoài (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ) | `GqlAuthGuard`, `PoliciesGuard` |
+| `approveRequest(requestId)` | Mutation | Phê duyệt đơn xin chấm công (chỉ ADMIN) | `GqlAuthGuard` |
+| `rejectRequest(requestId)` | Mutation | Từ chối đơn xin chấm công ngoài (chỉ ADMIN) | `GqlAuthGuard`  |
 
 ## Luồng nghiệp vụ chính
 
@@ -170,26 +173,84 @@ User đăng nhập → checkin() → Attendance (type: NORMAL) được tạo
 
 ### Xin chấm công ngoài
 
-User → createRequest(requestTime, reason)
-→ AttendanceRequest (status: PENDING) được tạo
-→ validate: requestTime phải là quá khứ
+User → `createRequest(requestTime, reason)`
+→ Tạo `AttendanceRequest` với `status = PENDING`
+→ Validate `requestTime` phải là thời điểm trong quá khứ
 
-Admin → attendanceRequests(status: PENDING) → xem danh sách chờ duyệt
+User → `myAttendanceRequests()`
+→ Xem các đơn xin chấm công của chính mình
+→ Theo dõi trạng thái `PENDING / APPROVED / REJECTED`
 
-Admin → approveRequest(requestId)
+Admin → `attendanceRequests(status: PENDING)`
+→ Xem danh sách các đơn đang chờ duyệt
+
+Admin → `approveRequest(requestId)`
 → Transaction:
-1. Kiểm tra đơn đang ở trạng thái PENDING
-2. Tạo Attendance mới (type: MANUAL, checkTime = requestTime của đơn)
-3. Update AttendanceRequest: status = APPROVED, reviewBy, reviewAt, attendanceId
+1. Kiểm tra đơn tồn tại và đang ở trạng thái `PENDING`
+2. Tạo `Attendance` mới:
+   - `type = MANUAL`
+   - `checkTime = requestTime` của đơn
+3. Update `AttendanceRequest`:
+   - `status = APPROVED`
+   - `reviewBy`
+   - `reviewAt`
+   - `attendanceId`
+→ Transaction commit thành công
+→ Bắn WebSocket event `requestApproved` tới đúng user
 
-User → attendanceHistory() → thấy bản ghi MANUAL mới xuất hiện
+User → `attendanceHistory()`
+→ Thấy bản ghi `Attendance` mới với `type = MANUAL`
+→ Nếu đang kết nối WebSocket, nhận notification `requestApproved` ngay lập tức mà không cần gọi lại API
 
 --- hoặc ---
 
-Admin → rejectRequest(requestId)
-→ Update AttendanceRequest: status = REJECTED, reviewBy, reviewAt
-→ Không tạo Attendance nào (đơn không được công nhận)
+Admin → `rejectRequest(requestId)`
+→ Transaction:
+1. Kiểm tra đơn tồn tại và đang ở trạng thái `PENDING`
+2. Update `AttendanceRequest`:
+   - `status = REJECTED`
+   - `reviewBy`
+   - `reviewAt`
+   - `note` (nếu có)
+3. Không tạo `Attendance`
+→ Transaction commit thành công
+→ Bắn WebSocket event `requestRejected` tới đúng user
 
+User → Nếu đang kết nối WebSocket
+→ Nhận notification `requestRejected` ngay lập tức
+
+
+---
+
+## Thông báo Real-time (WebSocket)
+
+Khi đơn xin chấm công ngoài được duyệt/từ chối, user liên quan (nếu đang giữ kết nối WebSocket mở) nhận thông báo ngay lập tức, không cần chủ động gọi lại API.
+
+### Xác thực kết nối
+
+Kết nối WebSocket được xác thực bằng JWT ngay lúc handshake, gửi qua `auth.token`:
+
+```javascript
+const socket = io('http://localhost:3000', {
+  auth: { token: '<accessToken>' },
+});
+```
+
+Server tự giải mã token, lấy `userId` và tự động join client vào room riêng (`user_<userId>`) — client **không tự chọn** room, tránh giả mạo danh tính người khác.
+
+### Sự kiện phát ra
+
+| Sự kiện | Khi nào bắn | Payload |
+|---|---|---|
+| `requestApproved` | Sau khi `approveRequest` transaction thành công | `{ requestId, status, message }` |
+| `requestRejected` | Sau khi `rejectRequest` thành công | `{ requestId, status, message }` |
+
+### Trạng thái
+
+- [x] Gateway xác thực JWT khi connect, tự động join room theo `userId`
+- [x] Tích hợp bắn sự kiện trong `approveRequest`/`rejectRequest`
+- [ ] Test end-to-end đầy đủ qua Postman Socket.IO client
+- [ ] Xử lý reconnect / token hết hạn giữa lúc giữ kết nối (đang tìm hiểu)
 
 ---
 
@@ -199,5 +260,8 @@ Admin → rejectRequest(requestId)
 - [x] Chấm công
 - [x] Xem lịch sử chấm công (filter theo thời gian, phân quyền theo role)
 - [x] Tạo đơn xin chấm công ngoài
+- [x] Xem đơn xin chấm công ngoài của chính mình
 - [x] Admin xem danh sách đơn (filter theo trạng thái)
 - [x] Admin duyệt / từ chối đơn
+- [x] Bắn sự kiện WebSocket khi duyệt/từ chối đơn
+- [x] Test end-to-end đầy đủ tính năng real-time

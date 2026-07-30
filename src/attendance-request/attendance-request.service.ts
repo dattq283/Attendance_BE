@@ -1,15 +1,16 @@
+import { NotificationGateway } from './../notification/notification.gateway';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CaslAbilityFactory } from '../casl/casl-ability.factory';
 import { AttendanceRequestInput } from './attendance-request.input';
 import { RequestStatus } from '@prisma/client';
 import { accessibleBy } from '@casl/prisma';
-
 @Injectable()
 export class AttendanceRequestService {
   constructor(
-    private prisma: PrismaService,
-    private caslAbilityFactory: CaslAbilityFactory,
+    private readonly prisma: PrismaService,
+    private readonly caslAbilityFactory: CaslAbilityFactory,
+    private readonly notificationGateway: NotificationGateway,
   ) {}
   async createRequest(userId: number, input: AttendanceRequestInput) {
     if (input.requestTime >= new Date()) {
@@ -47,7 +48,7 @@ export class AttendanceRequestService {
     requestId: number,
     user: { userId: number; role: string },
   ) {
-    return this.prisma.client.$transaction(async (tx) => {
+    const result = await this.prisma.client.$transaction(async (tx) => {
       const request = await tx.attendanceRequest.findUnique({
         where: { id: requestId },
       });
@@ -76,6 +77,12 @@ export class AttendanceRequestService {
         },
       });
     });
+    this.notificationGateway.notifyUser(result.userId, 'requestApproved', {
+      requestId: result.id,
+      status: 'APPROVED',
+    });
+
+    return result;
   }
 
   async rejectRequest(
@@ -83,16 +90,19 @@ export class AttendanceRequestService {
     user: { userId: number; role: string },
     note?: string,
   ) {
-    return this.prisma.client.$transaction(async (tx) => {
+    const result = await this.prisma.client.$transaction(async (tx) => {
       const request = await tx.attendanceRequest.findUnique({
         where: { id: requestId },
       });
+
       if (!request) {
         throw new BadRequestException('Không tìm thấy đơn');
       }
+
       if (request.status !== 'PENDING') {
         throw new BadRequestException('Đơn đã được xử lý');
       }
+
       return tx.attendanceRequest.update({
         where: {
           id: requestId,
@@ -105,5 +115,12 @@ export class AttendanceRequestService {
         },
       });
     });
+
+    this.notificationGateway.notifyUser(result.userId, 'requestRejected', {
+      requestId: result.id,
+      status: 'REJECTED',
+    });
+
+    return result;
   }
 }

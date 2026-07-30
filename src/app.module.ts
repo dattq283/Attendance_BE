@@ -13,6 +13,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { PassportModule } from '@nestjs/passport';
 import { CaslAbilityFactory } from './casl/casl-ability.factory';
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
+import { NotificationModule } from './notification/notification.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -29,6 +30,7 @@ import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin
     UserModule,
     AttendanceModule,
     AttendanceRequestModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService, CaslAbilityFactory],
