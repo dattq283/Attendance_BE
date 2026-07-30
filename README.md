@@ -157,9 +157,9 @@ Toàn bộ API là GraphQL Query/Mutation qua endpoint `/graphql`.
 | `checkin` | Mutation | Đăng nhập | `GqlAuthGuard` |
 | `attendanceHistory(from?, to?)` | Query | Xem lịch sử chấm công (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ) | `GqlAuthGuard`, `PoliciesGuard` |
 | `createRequest(input)` | Mutation | Tạo đơn xin chấm công ngoài | `GqlAuthGuard` |
-| `attendanceRequests(status?)` | Query | Xem đơn xin chấm công ngoài (Chỉ ADMIN mới xem được) | `GqlAuthGuard`, `PoliciesGuard` |
-| `approveRequest(requestId)` | Mutation | Phê duyệt đơn xin chấm công (ADMIN) | `GqlAuthGuard`, `RolesGuard` |
-| `rejectRequest(requestId)` | Mutation | Từ chối đơn xin chấm công ngoài (ADMIN) | `GqlAuthGuard`, `RolesGuard` |
+| `attendanceRequests(status?)` | Query | Xem đơn xin chấm công ngoài (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ)  | `GqlAuthGuard`, `PoliciesGuard` |
+| `approveRequest(requestId)` | Mutation | Phê duyệt đơn xin chấm công (ADMIN) | `GqlAuthGuard` |
+| `rejectRequest(requestId)` | Mutation | Từ chối đơn xin chấm công ngoài (ADMIN) | `GqlAuthGuard` |
 
 ## Luồng nghiệp vụ chính
 
