@@ -36,13 +36,14 @@ model User {
 }
 
 model Attendance {
-  id                 Int                 @id @default(autoincrement())
-  userId             Int
-  user               User                @relation(fields: [userId], references: [id])
-  checkTime          DateTime
-  type               AttendanceType                @default(NORMAL)
-  createdAt          DateTime            @default(now())
-  attendanceRequests AttendanceRequest[]
+  id                   Int                 @id @default(autoincrement())
+  userId               Int
+  user                 User                @relation(fields: [userId], references: [id])
+  checkTime            DateTime
+  type                 AttendanceType      @default(NORMAL)
+  createdAt            DateTime            @default(now())
+  attendanceRequestId  Int?
+  attendanceRequest    AttendanceRequest?  @relation(fields: [attendanceRequestId], references: [id])
 
   @@index([userId, checkTime])
 }
@@ -51,7 +52,8 @@ model AttendanceRequest {
   id           Int           @id @default(autoincrement())
   userId       Int
   user         User          @relation("requestOwner", fields: [userId], references: [id])
-  requestTime  DateTime
+  startTime    DateTime
+  endTime      DateTime
   reason       String
   status       RequestStatus @default(PENDING)
   reviewBy     Int?
@@ -59,10 +61,7 @@ model AttendanceRequest {
   reviewAt     DateTime?
   note         String?
   createdAt    DateTime      @default(now())
-  updatedAt    DateTime?     @updatedAt
-  attendance   Attendance?   @relation(fields: [attendanceId], references: [id])
-  attendanceId Int?
-
+  attendances  Attendance[]
   @@index([status])
   @@index([userId, status])
 }

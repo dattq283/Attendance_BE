@@ -42,7 +42,7 @@ export class NotificationGateway
   }
 
   handleDisconnect(client: Socket) {
-    console.log('Client ngắt kết nối:', client.id);
+    console.log('User đã ngắt kết nối:', client.id);
   }
 
   notifyUser(userId: number, event: string, payload: unknown) {

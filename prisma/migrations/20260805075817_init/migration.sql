@@ -18,6 +18,7 @@ CREATE TABLE `Attendance` (
     `checkTime` DATETIME(3) NOT NULL,
     `type` ENUM('NORMAL', 'MANUAL') NOT NULL DEFAULT 'NORMAL',
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `attendanceRequestId` INTEGER NULL,
 
     INDEX `Attendance_userId_checkTime_idx`(`userId`, `checkTime`),
     PRIMARY KEY (`id`)
@@ -27,15 +28,14 @@ CREATE TABLE `Attendance` (
 CREATE TABLE `AttendanceRequest` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `userId` INTEGER NOT NULL,
-    `requestTime` DATETIME(3) NOT NULL,
+    `startTime` DATETIME(3) NOT NULL,
+    `endTime` DATETIME(3) NOT NULL,
     `reason` VARCHAR(191) NOT NULL,
     `status` ENUM('APPROVED', 'REJECTED', 'PENDING') NOT NULL DEFAULT 'PENDING',
     `reviewBy` INTEGER NULL,
     `reviewAt` DATETIME(3) NULL,
     `note` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NULL,
-    `attendanceId` INTEGER NULL,
 
     INDEX `AttendanceRequest_status_idx`(`status`),
     INDEX `AttendanceRequest_userId_status_idx`(`userId`, `status`),
@@ -46,10 +46,10 @@ CREATE TABLE `AttendanceRequest` (
 ALTER TABLE `Attendance` ADD CONSTRAINT `Attendance_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `Attendance` ADD CONSTRAINT `Attendance_attendanceRequestId_fkey` FOREIGN KEY (`attendanceRequestId`) REFERENCES `AttendanceRequest`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `AttendanceRequest` ADD CONSTRAINT `AttendanceRequest_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `AttendanceRequest` ADD CONSTRAINT `AttendanceRequest_reviewBy_fkey` FOREIGN KEY (`reviewBy`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `AttendanceRequest` ADD CONSTRAINT `AttendanceRequest_attendanceId_fkey` FOREIGN KEY (`attendanceId`) REFERENCES `Attendance`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;

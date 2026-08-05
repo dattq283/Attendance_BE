@@ -14,7 +14,10 @@ export class AttendanceRequest {
   userId!: number;
 
   @Field(() => Date)
-  requestTime!: Date;
+  startTime!: Date;
+
+  @Field(() => Date)
+  endTime!: Date;
 
   @Field(() => String)
   reason!: string;
