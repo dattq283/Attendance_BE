@@ -50,7 +50,7 @@ export class AuthService {
         email: input.email,
       },
     });
-    if (!user)
+    if (!user || user.deletedAt)
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng!');
 
     // So sánh password

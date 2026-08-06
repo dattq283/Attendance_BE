@@ -33,6 +33,8 @@ model User {
   attendances Attendance[]
   requests    AttendanceRequest[] @relation("requestOwner")
   reviews     AttendanceRequest[] @relation("requestReviewer")
+
+  deletedAt   DateTime?
 }
 
 model Attendance {

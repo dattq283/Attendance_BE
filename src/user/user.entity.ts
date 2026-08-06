@@ -24,4 +24,7 @@ export class User {
 
   @Field(() => Date, { nullable: true })
   updatedAt?: Date | null;
+
+  @Field(() => Date, { nullable: true })
+  deletedAt?: Date | null;
 }

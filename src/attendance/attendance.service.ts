@@ -1,5 +1,5 @@
 import { CaslAbilityFactory } from './../casl/casl-ability.factory';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { accessibleBy } from '@casl/prisma';
 @Injectable()
@@ -9,6 +9,15 @@ export class AttendanceService {
     private caslAbilityFactory: CaslAbilityFactory,
   ) {}
   async checkIn(userId: number) {
+    const user = await this.prisma.client.user.findFirst({
+      where: {
+        id: userId,
+        deletedAt: null,
+      },
+    });
+    if (!user) {
+      throw new UnauthorizedException('Tài khoản đã dừng hoạt động!');
+    }
     return this.prisma.client.attendance.create({
       data: {
         userId: userId,

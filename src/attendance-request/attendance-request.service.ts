@@ -13,23 +13,28 @@ export class AttendanceRequestService {
     private readonly notificationGateway: NotificationGateway,
   ) {}
   async createRequest(userId: number, input: AttendanceRequestInput) {
-    const now = new Date();
-    if (input.startTime >= now || input.endTime >= now) {
-      throw new BadRequestException(
-        'Chỉ tạo được đơn xin chấm công ở thời điểm trong quá khứ!',
-      );
-    }
-    if (input.startTime >= input.endTime) {
+    const { startTime, endTime, reason } = input;
+    if (startTime >= endTime) {
       throw new BadRequestException(
         'Thời gian bắt đầu phải trước thời gian kết thúc',
       );
     }
+    if (startTime.toDateString() !== endTime.toDateString()) {
+      throw new BadRequestException('Chỉ được tạo đơn trong cùng một ngày');
+    }
+    const now = new Date();
+    if (startTime >= now || endTime <= now) {
+      throw new BadRequestException(
+        'Chỉ tạo được đơn xin chấm công ở thời điểm trong quá khứ!',
+      );
+    }
+
     return this.prisma.client.attendanceRequest.create({
       data: {
         userId,
-        startTime: input.startTime,
-        endTime: input.endTime,
-        reason: input.reason,
+        startTime,
+        endTime,
+        reason,
       },
     });
   }
@@ -68,22 +73,21 @@ export class AttendanceRequestService {
         throw new BadRequestException('Đơn đã được xử lý');
       }
 
-      await tx.attendance.create({
-        data: {
-          userId: request.userId,
-          checkTime: request.startTime,
-          type: 'MANUAL',
-          attendanceRequestId: request.id,
-        },
-      });
-
-      await tx.attendance.create({
-        data: {
-          userId: request.userId,
-          checkTime: request.endTime,
-          type: 'MANUAL',
-          attendanceRequestId: request.id,
-        },
+      await tx.attendance.createMany({
+        data: [
+          {
+            userId: request.userId,
+            checkTime: request.startTime,
+            type: 'MANUAL',
+            attendanceRequestId: request.id,
+          },
+          {
+            userId: request.userId,
+            checkTime: request.endTime,
+            type: 'MANUAL',
+            attendanceRequestId: request.id,
+          },
+        ],
       });
 
       return tx.attendanceRequest.update({
