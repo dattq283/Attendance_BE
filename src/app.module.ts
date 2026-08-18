@@ -14,8 +14,18 @@ import { PassportModule } from '@nestjs/passport';
 import { CaslAbilityFactory } from './casl/casl-ability.factory';
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 import { NotificationModule } from './notification/notification.module';
+import { ExportModule } from './export/export.module';
+import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
 @Module({
   imports: [
+    BullModule.forRoot({
+      connection: {
+        host: 'localhost',
+        port: 6379,
+      },
+    }),
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
     PassportModule,
     GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -31,6 +41,7 @@ import { NotificationModule } from './notification/notification.module';
     AttendanceModule,
     AttendanceRequestModule,
     NotificationModule,
+    ExportModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService, CaslAbilityFactory],
