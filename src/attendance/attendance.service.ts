@@ -16,7 +16,7 @@ export class AttendanceService {
       },
     });
     if (!user) {
-      throw new UnauthorizedException('Tài khoản đã dừng hoạt động!');
+      throw new UnauthorizedException('Account is inactive!');
     }
     return this.prisma.client.attendance.create({
       data: {

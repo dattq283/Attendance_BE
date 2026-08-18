@@ -21,7 +21,7 @@ export class AuthService {
       },
     });
     if (existingUser) {
-      throw new ConflictException('Email đã được sử dụng!');
+      throw new ConflictException('Email already in use!');
     }
     //Hash password
     const hashedPassword = bcrypt.hashSync(input.password, 8);
@@ -51,7 +51,7 @@ export class AuthService {
       },
     });
     if (!user || user.deletedAt)
-      throw new UnauthorizedException('Email hoặc mật khẩu không đúng!');
+      throw new UnauthorizedException('Invalid email or password!');
 
     // So sánh password
     const isPasswordValid = await bcrypt.compare(
@@ -59,7 +59,7 @@ export class AuthService {
       user.passwordHash,
     );
     if (!isPasswordValid)
-      throw new UnauthorizedException('Email hoặc mật khẩu không đúng!');
+      throw new UnauthorizedException('Invalid email or password!');
 
     //Sinh token
     const accessToken = this.generateToken(user.id, user.email, user.role);

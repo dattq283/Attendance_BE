@@ -4,10 +4,10 @@ import { IsEmail, IsNotEmpty } from 'class-validator';
 @InputType()
 export class LoginInput {
   @Field()
-  @IsEmail({}, { message: 'Email không hợp lệ!' })
+  @IsEmail({}, { message: 'Invalid email!' })
   email!: string;
 
   @Field()
-  @IsNotEmpty({ message: 'Mật khẩu không được để trống' })
+  @IsNotEmpty({ message: 'Password is required' })
   password!: string;
 }

@@ -3,14 +3,14 @@ import { IsNotEmpty } from 'class-validator';
 @InputType()
 export class AttendanceRequestInput {
   @Field(() => Date)
-  @IsNotEmpty({ message: 'Thời gian không được để trống!' })
+  @IsNotEmpty({ message: 'Start time is required!' })
   startTime!: Date;
 
   @Field(() => Date)
-  @IsNotEmpty({ message: 'Thời gian không được để trống!' })
+  @IsNotEmpty({ message: 'End time is required!' })
   endTime!: Date;
 
   @Field()
-  @IsNotEmpty({ message: 'Lý do không được để trống!' })
+  @IsNotEmpty({ message: 'Reason is required!' })
   reason!: string;
 }

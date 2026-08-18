@@ -34,15 +34,15 @@ export class NotificationGateway
       const userId = payload.sub;
 
       await client.join(`user_${userId}`);
-      console.log(`User ${userId} đã join room qua xác thực JWT`);
+      console.log(`User ${userId} joined room via JWT authentication`);
     } catch {
-      console.log('JWT không hợp lệ, ngắt kết nối client');
+      console.log('Invalid JWT, disconnecting client');
       client.disconnect();
     }
   }
 
   handleDisconnect(client: Socket) {
-    console.log('User đã ngắt kết nối:', client.id);
+    console.log('User disconnected:', client.id);
   }
 
   notifyUser(userId: number, event: string, payload: unknown) {

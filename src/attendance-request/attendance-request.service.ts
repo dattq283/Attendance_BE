@@ -15,18 +15,14 @@ export class AttendanceRequestService {
   async createRequest(userId: number, input: AttendanceRequestInput) {
     const { startTime, endTime, reason } = input;
     if (startTime >= endTime) {
-      throw new BadRequestException(
-        'Thời gian bắt đầu phải trước thời gian kết thúc',
-      );
+      throw new BadRequestException('Start time must be before end time');
     }
     if (startTime.toDateString() !== endTime.toDateString()) {
-      throw new BadRequestException('Chỉ được tạo đơn trong cùng một ngày');
+      throw new BadRequestException('Request must be for the same day');
     }
     const now = new Date();
-    if (startTime >= now || endTime <= now) {
-      throw new BadRequestException(
-        'Chỉ tạo được đơn xin chấm công ở thời điểm trong quá khứ!',
-      );
+    if (startTime > now) {
+      throw new BadRequestException('Only create request in the past times');
     }
 
     return this.prisma.client.attendanceRequest.create({
@@ -66,11 +62,11 @@ export class AttendanceRequestService {
       });
 
       if (!request) {
-        throw new BadRequestException('Không tìm thấy đơn');
+        throw new BadRequestException('Request not found');
       }
 
       if (request.status !== 'PENDING') {
-        throw new BadRequestException('Đơn đã được xử lý');
+        throw new BadRequestException('Request already processed');
       }
 
       await tx.attendance.createMany({
@@ -119,11 +115,11 @@ export class AttendanceRequestService {
       });
 
       if (!request) {
-        throw new BadRequestException('Không tìm thấy đơn');
+        throw new BadRequestException('Request not found');
       }
 
       if (request.status !== 'PENDING') {
-        throw new BadRequestException('Đơn đã được xử lý');
+        throw new BadRequestException('Request already processed');
       }
 
       return tx.attendanceRequest.update({
