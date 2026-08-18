@@ -6,6 +6,7 @@ import { ExportService } from './export.service';
 import { ExportResolver } from './export.resolver';
 import { ExportProcessor } from './export.processor';
 import { ExportCronService } from './export-cron.service';
+import { CaslAbilityFactory } from '../casl/casl-ability.factory';
 @Module({
   imports: [
     BullModule.registerQueue({ name: 'export' }),
@@ -17,6 +18,7 @@ import { ExportCronService } from './export-cron.service';
     ExportResolver,
     ExportProcessor,
     ExportCronService,
+    CaslAbilityFactory,
   ],
 })
 export class ExportModule {}

@@ -13,6 +13,8 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
 - [Danh sách API](#danh-sách-api)
 - [Luồng nghiệp vụ chính](#luồng-nghiệp-vụ-chính)
 - [Thông báo Real-time (WebSocket)](#thông-báo-real-time-websocket)
+- [Export Báo cáo Tháng](#export-báo-cáo-tháng)
+- [Trạng thái hoàn thành](#trạng-thái-hoàn-thành)
 
 ---
 
@@ -29,6 +31,9 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
 | Real-time | Socket.io (NestJS Gateway) |
 | Validate | class-validator |
 | Hash password | bcrypt |
+| Job Queue | BullMQ + Redis |
+| Scheduled Jobs | @nestjs/schedule |
+| Report Export | ExcelJS (XLSX) |
 
 ## Kiến trúc tổng quan
 
@@ -76,6 +81,12 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
     - `attendance-request.input.ts`
     - `attendance-request.service.ts`
     - `attendance-request.resolver.ts`
+  - `export/` — Export báo cáo chấm công tháng
+    - `export.service.ts` (queueing)
+    - `export.processor.ts` (BullMQ job worker)
+    - `export-cron.service.ts` (scheduled task tự động)
+    - `export.resolver.ts`
+    - `export.module.ts`
   - `app.module.ts`
   - `main.ts`
 
@@ -91,7 +102,7 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
 
 **AttendanceRequest** — đơn xin chấm công ngoài.
 - `status: PENDING | APPROVED | REJECTED`
-- Khi `APPROVED`, hệ thống tự tạo 1 bản ghi `Attendance` tương ứng (liên kết qua `attendanceId`), đảm bảo API xem lịch sử chỉ cần truy vấn đúng 1 bảng.
+- Khi `APPROVED`, hệ thống tự tạo 2 bản ghi `Attendance` tương ứng (liên kết qua `attendanceId`), đảm bảo API xem lịch sử chỉ cần truy vấn đúng 1 bảng.
 
 Xem chi tiết đầy đủ tại `prisma/schema.prisma`.
 
@@ -159,10 +170,10 @@ Toàn bộ API là GraphQL Query/Mutation qua endpoint `/graphql`.
 | `checkin` | Mutation | Đăng nhập | `GqlAuthGuard` |
 | `attendanceHistory(from?, to?)` | Query | Xem lịch sử chấm công (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ) | `GqlAuthGuard`, `PoliciesGuard` |
 | `createRequest(input)` | Mutation | Tạo đơn xin chấm công ngoài | `GqlAuthGuard` |
-| `myAttendanceRequests` | Query | Xem đơn xin chấm công ngoài của chính mình | `GqlAuthGuard` |
 | `attendanceRequests(status?)` | Query | Xem đơn xin chấm công ngoài (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ) | `GqlAuthGuard`, `PoliciesGuard` |
-| `approveRequest(requestId)` | Mutation | Phê duyệt đơn xin chấm công (chỉ ADMIN) | `GqlAuthGuard` |
-| `rejectRequest(requestId)` | Mutation | Từ chối đơn xin chấm công ngoài (chỉ ADMIN) | `GqlAuthGuard`  |
+| `approveRequest(requestId)` | Mutation | Phê duyệt đơn xin chấm công (chỉ ADMIN) | `GqlAuthGuard`, `PoliciesGuard` |
+| `rejectRequest(requestId, note?)` | Mutation | Từ chối đơn xin chấm công ngoài (chỉ ADMIN) | `GqlAuthGuard`, `PoliciesGuard` |
+| `trgMonthlyExport(month, year)` | Mutation | Trigger export báo cáo chấm công theo tháng (chỉ ADMIN có thể export thủ công) | `GqlAuthGuard`, `PoliciesGuard` |
 
 ## Luồng nghiệp vụ chính
 
@@ -177,8 +188,8 @@ User → `createRequest(requestTime, reason)`
 → Tạo `AttendanceRequest` với `status = PENDING`
 → Validate `requestTime` phải là thời điểm trong quá khứ
 
-User → `myAttendanceRequests()`
-→ Xem các đơn xin chấm công của chính mình
+User → `attendanceRequests(status: null)`
+→ Xem các đơn xin chấm công của chính mình (với CASL filter tự động)
 → Theo dõi trạng thái `PENDING / APPROVED / REJECTED`
 
 Admin → `attendanceRequests(status: PENDING)`
@@ -199,7 +210,7 @@ Admin → `approveRequest(requestId)`
 → Bắn WebSocket event `requestApproved` tới đúng user
 
 User → `attendanceHistory()`
-→ Thấy bản ghi `Attendance` mới với `type = MANUAL`
+→ Thấy 2 bản ghi `Attendance` mới với `type = MANUAL`
 → Nếu đang kết nối WebSocket, nhận notification `requestApproved` ngay lập tức mà không cần gọi lại API
 
 --- hoặc ---
@@ -249,19 +260,69 @@ Server tự giải mã token, lấy `userId` và tự động join client vào r
 
 - [x] Gateway xác thực JWT khi connect, tự động join room theo `userId`
 - [x] Tích hợp bắn sự kiện trong `approveRequest`/`rejectRequest`
-- [ ] Test end-to-end đầy đủ qua Postman Socket.IO client
-- [ ] Xử lý reconnect / token hết hạn giữa lúc giữ kết nối (đang tìm hiểu)
+- [x] Test end-to-end đầy đủ qua Postman Socket.IO client
 
 ---
 
-## Trạng thái hoàn thành
+## Export Báo cáo Tháng
+
+Hệ thống cho phép export lịch sử chấm công tháng thành file Excel (.xlsx) để báo cáo / lưu trữ.
+
+### Cách dùng
+
+**Trigger export thủ công (Admin):**
+```graphql
+mutation {
+  trgMonthlyExport(month: 8, year: 2026)
+}
+```
+
+Respons: `exportId` (ví dụ `EXP-a1b2c3d4-e5f6...`)
+
+**Tự động export tháng trước:**
+- Mỗi tháng (ngày 1 lúc 00:00), cron job tự động trigger export cho tháng trước
+- File được lưu tại: `exports/<month>-<year>/<exportId>.xlsx`
+- Ví dụ: `exports/7-2026/EXP-a1b2c3d4.xlsx` (báo cáo tháng 7 năm 2026)
+
+### Chi tiết flow
+
+1. **Resolver** nhận request `trgMonthlyExport(month, year)`
+2. **Service** thêm job vào queue BullMQ (kèm `exportId`)
+3. **Processor** (BullMQ Worker) xử lý job:
+   - Truy vấn tất cả `Attendance` trong tháng tương ứng
+   - Tạo workbook Excel, thêm headers & rows
+   - Ghi file vào folder `exports/<month>-<year>/`
+4. Job retry tối đa 3 lần nếu fail (delay 5 giây)
+5. Response trả về `exportId` để client theo dõi hoặc download
+
+### Yêu cầu cấu hình
+
+**Redis phải chạy** (để BullMQ lưu trữ job queue):
+
+```bash
+# Cục bộ
+redis-server
+
+# Hoặc dùng Docker
+docker run -d -p 6379:6379 redis:latest
+```
+
+**Biến môi trường (nếu cần):**
+```env
+REDIS_URL=redis://localhost:6379
+```
+
+---
+
+# Trạng thái hoàn thành
 
 - [x] Đăng ký / Đăng nhập (JWT)
 - [x] Chấm công
 - [x] Xem lịch sử chấm công (filter theo thời gian, phân quyền theo role)
 - [x] Tạo đơn xin chấm công ngoài
-- [x] Xem đơn xin chấm công ngoài của chính mình
+- [x] Xem đơn xin chấm công ngoài (với CASL filtering)
 - [x] Admin xem danh sách đơn (filter theo trạng thái)
 - [x] Admin duyệt / từ chối đơn
 - [x] Bắn sự kiện WebSocket khi duyệt/từ chối đơn
 - [x] Test end-to-end đầy đủ tính năng real-time
+- [x] Export báo cáo chấm công tháng (manual + auto cron)

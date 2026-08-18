@@ -6,6 +6,7 @@ import { Subjects, createPrismaAbility, PrismaQuery } from '@casl/prisma';
 export type Actions = 'manage' | 'create' | 'read' | 'update' | 'delete';
 export type AppSubjects =
   | 'all'
+  | 'AttendanceReport'
   | Subjects<{
       User: User;
       Attendance: Attendance;
@@ -19,7 +20,8 @@ export class CaslAbilityFactory {
     if (user.role === 'ADMIN') {
       can('manage', 'all');
     } else {
-      can('create', 'all');
+      can('create', 'Attendance');
+      can('create', 'AttendanceRequest');
       can('read', 'Attendance', { userId: user.userId });
       can('create', 'AttendanceRequest');
       can('read', 'AttendanceRequest', { userId: user.userId });
