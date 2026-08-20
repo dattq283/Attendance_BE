@@ -1,3 +1,4 @@
+import { NotificationGateway } from './../notification/notification.gateway';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -11,7 +12,10 @@ interface MonthlyReportData {
 }
 @Processor('export')
 export class ExportProcessor extends WorkerHost {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationGateway: NotificationGateway,
+  ) {
     super();
   }
   async process(job: Job<MonthlyReportData>): Promise<void> {
@@ -46,5 +50,11 @@ export class ExportProcessor extends WorkerHost {
     });
     await workBook.xlsx.writeFile(filePath);
     console.log('Export completed:', { exportId, month, year, filePath });
+
+    this.notificationGateway.notifyAdmin('exportCompleted', {
+      exportId,
+      month,
+      year,
+    });
   }
 }

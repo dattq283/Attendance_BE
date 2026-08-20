@@ -32,9 +32,12 @@ export class NotificationGateway
 
       const payload = this.jwtService.verify<JwtPayload>(token);
       const userId = payload.sub;
-
+      const userRole = payload.role;
       await client.join(`user_${userId}`);
-      console.log(`User ${userId} joined room via JWT authentication`);
+      await client.join(`role_${userRole}`);
+      console.log(
+        `${userRole} with id ${userId} joined room via JWT authentication`,
+      );
     } catch {
       console.log('Invalid JWT, disconnecting client');
       client.disconnect();
@@ -47,5 +50,9 @@ export class NotificationGateway
 
   notifyUser(userId: number, event: string, payload: unknown) {
     this.server.to(`user_${userId}`).emit(event, payload);
+  }
+
+  notifyAdmin(event: string, payload: unknown) {
+    this.server.to('role_ADMIN').emit(event, payload);
   }
 }
