@@ -5,6 +5,7 @@ import { CaslAbilityFactory } from '../casl/casl-ability.factory';
 import { AttendanceRequestInput } from './attendance-request.input';
 import { RequestStatus } from '@prisma/client';
 import { accessibleBy } from '@casl/prisma';
+import { AttendanceRequest } from './attendance-request.entity';
 @Injectable()
 export class AttendanceRequestService {
   constructor(
@@ -52,23 +53,25 @@ export class AttendanceRequestService {
       },
     });
   }
-  async approveRequest(
-    requestId: number,
-    user: { userId: number; role: string },
-  ) {
+  async approveRequest(requestId: number, user: { userId: number }) {
     const result = await this.prisma.client.$transaction(async (tx) => {
-      const request = await tx.attendanceRequest.findUnique({
+      const updateResult = await tx.attendanceRequest.updateMany({
+        where: {
+          id: requestId,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'APPROVED',
+          reviewBy: user.userId,
+          reviewAt: new Date(),
+        },
+      });
+      if (updateResult.count === 0) {
+        throw new BadRequestException('Đơn đã được xử lý hoặc không tồn tại!');
+      }
+      const request = await tx.attendanceRequest.findUniqueOrThrow({
         where: { id: requestId },
       });
-
-      if (!request) {
-        throw new BadRequestException('Request not found');
-      }
-
-      if (request.status !== 'PENDING') {
-        throw new BadRequestException('Request already processed');
-      }
-
       await tx.attendance.createMany({
         data: [
           {
@@ -85,59 +88,48 @@ export class AttendanceRequestService {
           },
         ],
       });
-
-      return tx.attendanceRequest.update({
-        where: { id: requestId },
-        data: {
-          status: 'APPROVED',
-          reviewBy: user.userId,
-          reviewAt: new Date(),
-        },
-      });
+      return request;
     });
-
     this.notificationGateway.notifyUser(result.userId, 'requestApproved', {
       requestId: result.id,
       status: 'APPROVED',
+      message: 'Your request is approved!',
     });
-
     return result;
   }
 
   async rejectRequest(
     requestId: number,
-    user: { userId: number; role: string },
+    user: { userId: number },
     note?: string,
-  ) {
-    const result = await this.prisma.client.$transaction(async (tx) => {
-      const request = await tx.attendanceRequest.findUnique({
-        where: { id: requestId },
-      });
-
-      if (!request) {
-        throw new BadRequestException('Request not found');
-      }
-
-      if (request.status !== 'PENDING') {
-        throw new BadRequestException('Request already processed');
-      }
-
-      return tx.attendanceRequest.update({
-        where: {
-          id: requestId,
-        },
-        data: {
-          status: 'REJECTED',
-          reviewBy: user.userId,
-          reviewAt: new Date(),
-          note,
-        },
-      });
+  ): Promise<AttendanceRequest> {
+    const updateResult = await this.prisma.client.attendanceRequest.updateMany({
+      where: {
+        id: requestId,
+        status: 'PENDING',
+      },
+      data: {
+        status: 'REJECTED',
+        reviewBy: user.userId,
+        reviewAt: new Date(),
+        note,
+      },
     });
+
+    if (updateResult.count === 0) {
+      throw new BadRequestException('Đơn đã được xử lý hoặc không tồn tại!');
+    }
+
+    const result = await this.prisma.client.attendanceRequest.findUniqueOrThrow(
+      {
+        where: { id: requestId },
+      },
+    );
 
     this.notificationGateway.notifyUser(result.userId, 'requestRejected', {
       requestId: result.id,
       status: 'REJECTED',
+      message: `Your request is rejected!`,
     });
 
     return result;

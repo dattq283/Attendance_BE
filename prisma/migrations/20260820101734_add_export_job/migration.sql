@@ -43,6 +43,22 @@ CREATE TABLE `AttendanceRequest` (
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- CreateTable
+CREATE TABLE `ExportJob` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `exportId` VARCHAR(191) NOT NULL,
+    `exportMonth` INTEGER NOT NULL,
+    `exportYear` INTEGER NOT NULL,
+    `exportedBy` INTEGER NULL,
+    `status` ENUM('QUEUED', 'PROCESSING', 'DONE', 'FAILED') NOT NULL DEFAULT 'QUEUED',
+    `path` VARCHAR(191) NULL,
+    `completedTime` DATETIME(3) NULL,
+    `errors` VARCHAR(191) NULL,
+
+    UNIQUE INDEX `ExportJob_exportId_key`(`exportId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- AddForeignKey
 ALTER TABLE `Attendance` ADD CONSTRAINT `Attendance_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -54,3 +70,6 @@ ALTER TABLE `AttendanceRequest` ADD CONSTRAINT `AttendanceRequest_userId_fkey` F
 
 -- AddForeignKey
 ALTER TABLE `AttendanceRequest` ADD CONSTRAINT `AttendanceRequest_reviewBy_fkey` FOREIGN KEY (`reviewBy`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `ExportJob` ADD CONSTRAINT `ExportJob_exportedBy_fkey` FOREIGN KEY (`exportedBy`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;

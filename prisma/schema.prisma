@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -23,47 +23,70 @@ enum AttendanceType {
   MANUAL
 }
 
-model User {
-  id           Int       @id @default(autoincrement())
-  fullName     String
-  email        String    @unique
-  passwordHash String
-  role         Role      @default(EMPLOYEE)
-  createdAt    DateTime  @default(now())
-  attendances Attendance[]
-  requests    AttendanceRequest[] @relation("requestOwner")
-  reviews     AttendanceRequest[] @relation("requestReviewer")
+enum ExportStatus {
+  QUEUED
+  PROCESSING
+  DONE
+  FAILED
+}
 
-  deletedAt   DateTime?
+model User {
+  id           Int                 @id @default(autoincrement())
+  fullName     String
+  email        String              @unique
+  passwordHash String
+  role         Role                @default(EMPLOYEE)
+  createdAt    DateTime            @default(now())
+  attendances  Attendance[]
+  requests     AttendanceRequest[] @relation("requestOwner")
+  reviews      AttendanceRequest[] @relation("requestReviewer")
+
+  exportJobs ExportJob[] @relation("jobExporter")
+
+  deletedAt DateTime?
 }
 
 model Attendance {
-  id                   Int                 @id @default(autoincrement())
-  userId               Int
-  user                 User                @relation(fields: [userId], references: [id])
-  checkTime            DateTime
-  type                 AttendanceType      @default(NORMAL)
-  createdAt            DateTime            @default(now())
-  attendanceRequestId  Int?
-  attendanceRequest    AttendanceRequest?  @relation(fields: [attendanceRequestId], references: [id])
+  id                  Int                @id @default(autoincrement())
+  userId              Int
+  user                User               @relation(fields: [userId], references: [id])
+  checkTime           DateTime
+  type                AttendanceType     @default(NORMAL)
+  createdAt           DateTime           @default(now())
+  attendanceRequestId Int?
+  attendanceRequest   AttendanceRequest? @relation(fields: [attendanceRequestId], references: [id])
 
   @@index([userId, checkTime])
 }
 
 model AttendanceRequest {
-  id           Int           @id @default(autoincrement())
-  userId       Int
-  user         User          @relation("requestOwner", fields: [userId], references: [id])
-  startTime    DateTime
-  endTime      DateTime
-  reason       String
-  status       RequestStatus @default(PENDING)
-  reviewBy     Int?
-  reviewer     User?         @relation("requestReviewer", fields: [reviewBy], references: [id])
-  reviewAt     DateTime?
-  note         String?
-  createdAt    DateTime      @default(now())
-  attendances  Attendance[]
+  id          Int           @id @default(autoincrement())
+  userId      Int
+  user        User          @relation("requestOwner", fields: [userId], references: [id])
+  startTime   DateTime
+  endTime     DateTime
+  reason      String
+  status      RequestStatus @default(PENDING)
+  reviewBy    Int?
+  reviewer    User?         @relation("requestReviewer", fields: [reviewBy], references: [id])
+  reviewAt    DateTime?
+  note        String?
+  createdAt   DateTime      @default(now())
+  attendances Attendance[]
+
   @@index([status])
   @@index([userId, status])
+}
+
+model ExportJob {
+  id            Int          @id @default(autoincrement())
+  exportId      String       @unique
+  exportMonth   Int
+  exportYear    Int
+  exportedBy    Int?
+  exporter      User?        @relation("jobExporter", fields: [exportedBy], references: [id])
+  status        ExportStatus @default(QUEUED)
+  path          String?
+  completedTime DateTime?
+  errors        String?
 }
