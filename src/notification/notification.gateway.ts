@@ -24,7 +24,7 @@ export class NotificationGateway
 
   async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.query.token as string;
+      const token = this.extractToken(client);
       if (!token) {
         client.disconnect();
         return;
@@ -42,6 +42,18 @@ export class NotificationGateway
       console.log('Invalid JWT, disconnecting client');
       client.disconnect();
     }
+  }
+
+  private extractToken(client: Socket): string | undefined {
+    if (client.handshake.auth?.token) {
+      return client.handshake.auth.token as string;
+    }
+    const authHeader = client.handshake.headers?.authorization;
+    if (authHeader?.startsWith('Bearer ')) return authHeader.substring(7);
+    if (client.handshake.query?.token) {
+      return client.handshake.query.token as string;
+    }
+    return undefined;
   }
 
   handleDisconnect(client: Socket) {
