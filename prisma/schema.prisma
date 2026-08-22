@@ -88,5 +88,5 @@ model ExportJob {
   status        ExportStatus @default(QUEUED)
   path          String?
   completedTime DateTime?
-  errors        String?
+  reason        String?
 }

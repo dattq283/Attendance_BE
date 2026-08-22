@@ -53,7 +53,7 @@ CREATE TABLE `ExportJob` (
     `status` ENUM('QUEUED', 'PROCESSING', 'DONE', 'FAILED') NOT NULL DEFAULT 'QUEUED',
     `path` VARCHAR(191) NULL,
     `completedTime` DATETIME(3) NULL,
-    `errors` VARCHAR(191) NULL,
+    `reason` VARCHAR(191) NULL,
 
     UNIQUE INDEX `ExportJob_exportId_key`(`exportId`),
     PRIMARY KEY (`id`)

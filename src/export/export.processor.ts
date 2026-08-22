@@ -20,41 +20,70 @@ export class ExportProcessor extends WorkerHost {
   }
   async process(job: Job<MonthlyReportData>): Promise<void> {
     const { exportId, month, year } = job.data;
-    const attendances = await this.prisma.client.attendance.findMany({
-      where: {
-        checkTime: {
-          gte: new Date(year, month - 1, 1),
-          lt: new Date(year, month, 1),
-        },
-      },
-      orderBy: { checkTime: 'asc' },
-    });
-    const folderPath = path.join(process.cwd(), 'exports', `${month}-${year}`);
-    fs.mkdirSync(folderPath, { recursive: true });
-
-    const filePath = path.join(folderPath, `${exportId}.xlsx`);
-
-    const workBook = new ExcelJS.Workbook();
-    const workSheet = workBook.addWorksheet('Attendance Report');
-    workSheet.columns = [
-      { header: 'User ID', key: 'userId', width: 15 },
-      { header: 'CheckTime', key: 'checkTime', width: 15 },
-      { header: 'Type', key: 'type', width: 15 },
-    ];
-    attendances.forEach((a) => {
-      workSheet.addRow({
-        userId: a.userId,
-        checkTime: a.checkTime.toLocaleString('vi-VN'),
-        type: a.type,
+    try {
+      await this.prisma.client.exportJob.updateMany({
+        where: { exportId },
+        data: { status: 'PROCESSING' },
       });
-    });
-    await workBook.xlsx.writeFile(filePath);
-    console.log('Export completed:', { exportId, month, year, filePath });
+      const attendances = await this.prisma.client.attendance.findMany({
+        where: {
+          checkTime: {
+            gte: new Date(year, month - 1, 1),
+            lt: new Date(year, month, 1),
+          },
+        },
+        orderBy: { checkTime: 'asc' },
+      });
+      const folderPath = path.join(
+        process.cwd(),
+        'exports',
+        `${month}-${year}`,
+      );
+      fs.mkdirSync(folderPath, { recursive: true });
 
-    this.notificationGateway.notifyAdmin('exportCompleted', {
-      exportId,
-      month,
-      year,
-    });
+      const filePath = path.join(folderPath, `${exportId}.xlsx`);
+
+      const workBook = new ExcelJS.Workbook();
+      const workSheet = workBook.addWorksheet('Attendance Report');
+      workSheet.columns = [
+        { header: 'User ID', key: 'userId', width: 15 },
+        { header: 'CheckTime', key: 'checkTime', width: 15 },
+        { header: 'Type', key: 'type', width: 15 },
+      ];
+      attendances.forEach((a) => {
+        workSheet.addRow({
+          userId: a.userId,
+          checkTime: a.checkTime.toLocaleString('vi-VN'),
+          type: a.type,
+        });
+      });
+      await workBook.xlsx.writeFile(filePath);
+
+      await this.prisma.client.exportJob.updateMany({
+        where: { exportId },
+        data: { status: 'DONE', path: filePath, completedTime: new Date() },
+      });
+      console.log('Export completed:', { exportId, month, year, filePath });
+
+      this.notificationGateway.notifyAdmin('exportCompleted', {
+        exportId,
+        month,
+        year,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log('Export failed:', { exportId, month, year, error: message });
+      await this.prisma.client.exportJob.updateMany({
+        where: { exportId },
+        data: { status: 'FAILED', reason: message, completedTime: new Date() },
+      });
+      this.notificationGateway.notifyAdmin('exportFailed', {
+        exportId,
+        month,
+        year,
+        reason: message,
+      });
+      throw error;
+    }
   }
 }
