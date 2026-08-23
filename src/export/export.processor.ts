@@ -59,30 +59,56 @@ export class ExportProcessor extends WorkerHost {
       });
       await workBook.xlsx.writeFile(filePath);
 
-      await this.prisma.client.exportJob.updateMany({
+      const updatedJob = await this.prisma.client.exportJob.update({
         where: { exportId },
         data: { status: 'DONE', path: filePath, completedTime: new Date() },
       });
       console.log('Export completed:', { exportId, month, year, filePath });
-
-      this.notificationGateway.notifyAdmin('exportCompleted', {
-        exportId,
-        month,
-        year,
-      });
+      if (updatedJob.exportedBy) {
+        this.notificationGateway.notifyUser(
+          updatedJob.exportedBy,
+          'exportCompleted',
+          {
+            exportId,
+            month,
+            year,
+            message: `${month}/${year} report is ready!`,
+          },
+        );
+      } else {
+        this.notificationGateway.notifyAdmin('exportCompleted', {
+          exportId,
+          month,
+          year,
+          message: `${month}/${year} report is ready!`,
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.log('Export failed:', { exportId, month, year, error: message });
-      await this.prisma.client.exportJob.updateMany({
+      const updatedJob = await this.prisma.client.exportJob.update({
         where: { exportId },
         data: { status: 'FAILED', reason: message, completedTime: new Date() },
       });
-      this.notificationGateway.notifyAdmin('exportFailed', {
-        exportId,
-        month,
-        year,
-        reason: message,
-      });
+      if (updatedJob.exportedBy) {
+        this.notificationGateway.notifyUser(
+          updatedJob.exportedBy,
+          'exportFailed',
+          {
+            exportId,
+            month,
+            year,
+            reason: message,
+          },
+        );
+      } else {
+        this.notificationGateway.notifyAdmin('exportFailed', {
+          exportId,
+          month,
+          year,
+          reason: message,
+        });
+      }
       throw error;
     }
   }

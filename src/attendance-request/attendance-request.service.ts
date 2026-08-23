@@ -67,7 +67,7 @@ export class AttendanceRequestService {
         },
       });
       if (updateResult.count === 0) {
-        throw new BadRequestException('Đơn đã được xử lý hoặc không tồn tại!');
+        throw new BadRequestException('Request is processing or not found!');
       }
       const request = await tx.attendanceRequest.findUniqueOrThrow({
         where: { id: requestId },
@@ -117,7 +117,7 @@ export class AttendanceRequestService {
     });
 
     if (updateResult.count === 0) {
-      throw new BadRequestException('Đơn đã được xử lý hoặc không tồn tại!');
+      throw new BadRequestException('Request is processing or not found!');
     }
 
     const result = await this.prisma.client.attendanceRequest.findUniqueOrThrow(
