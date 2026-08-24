@@ -14,4 +14,14 @@ export class UserService {
       },
     });
   }
+  async reactiveUser(userId: number) {
+    return this.prisma.client.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        deletedAt: null,
+      },
+    });
+  }
 }

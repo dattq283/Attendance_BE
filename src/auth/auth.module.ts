@@ -7,6 +7,7 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CaslAbilityFactory } from '../casl/casl-ability.factory';
+import { PrismaModule } from '../../prisma/prisma.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { CaslAbilityFactory } from '../casl/casl-ability.factory';
         signOptions: { expiresIn: '24h' },
       }),
     }),
+    PrismaModule,
   ],
   providers: [AuthService, AuthResolver, JwtStrategy, CaslAbilityFactory],
   exports: [JwtModule],

@@ -1,7 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 
 interface JwtPayload {
   sub: number;
@@ -11,7 +12,10 @@ interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(configService: ConfigService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    configService: ConfigService,
+  ) {
     const secretKey = configService.get<string>('JWT_SECRET');
 
     if (!secretKey) {
@@ -24,7 +28,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  validate(payload: JwtPayload) {
-    return { userId: payload.sub, username: payload.email, role: payload.role };
+  async validate(payload: JwtPayload) {
+    const user = await this.prisma.client.user.findUnique({
+      where: {
+        id: payload.sub,
+      },
+    });
+    if (!user || user.deletedAt) {
+      throw new UnauthorizedException('Account is expired!');
+    }
+    return { userId: user.id, username: user.email, role: user.role };
   }
 }
