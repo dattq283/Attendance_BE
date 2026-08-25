@@ -1,5 +1,9 @@
 import { NotificationGateway } from './../notification/notification.gateway';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CaslAbilityFactory } from '../casl/casl-ability.factory';
 import { AttendanceRequestInput } from './attendance-request.input';
@@ -22,7 +26,7 @@ export class AttendanceRequestService {
       throw new BadRequestException('Request must be for the same day');
     }
     const now = new Date();
-    if (startTime > now) {
+    if (startTime > now && endTime <= now) {
       throw new BadRequestException('Only create request in the past times');
     }
 
@@ -55,6 +59,16 @@ export class AttendanceRequestService {
   }
   async approveRequest(requestId: number, user: { userId: number }) {
     const result = await this.prisma.client.$transaction(async (tx) => {
+      const request = await tx.attendanceRequest.findUnique({
+        where: { id: requestId },
+      });
+      if (!request) {
+        throw new BadRequestException('Request not found!');
+      }
+      if (request.userId === user.userId) {
+        throw new ForbiddenException('You cannot approve your own request!');
+      }
+
       const updateResult = await tx.attendanceRequest.updateMany({
         where: {
           id: requestId,
@@ -69,9 +83,7 @@ export class AttendanceRequestService {
       if (updateResult.count === 0) {
         throw new BadRequestException('Request is processing or not found!');
       }
-      const request = await tx.attendanceRequest.findUniqueOrThrow({
-        where: { id: requestId },
-      });
+
       await tx.attendance.createMany({
         data: [
           {
@@ -88,7 +100,11 @@ export class AttendanceRequestService {
           },
         ],
       });
-      return request;
+      return tx.attendanceRequest.findUniqueOrThrow({
+        where: {
+          id: requestId,
+        },
+      });
     });
     this.notificationGateway.notifyUser(result.userId, 'requestApproved', {
       requestId: result.id,
@@ -103,33 +119,49 @@ export class AttendanceRequestService {
     user: { userId: number },
     note?: string,
   ): Promise<AttendanceRequest> {
-    const updateResult = await this.prisma.client.attendanceRequest.updateMany({
-      where: {
-        id: requestId,
-        status: 'PENDING',
-      },
-      data: {
-        status: 'REJECTED',
-        reviewBy: user.userId,
-        reviewAt: new Date(),
-        note,
-      },
+    const result = await this.prisma.client.$transaction(async (tx) => {
+      const request = await tx.attendanceRequest.findUnique({
+        where: {
+          id: requestId,
+        },
+      });
+
+      if (!request) {
+        throw new BadRequestException('Request not found!');
+      }
+
+      if (request.userId === user.userId) {
+        throw new ForbiddenException('You cannot reject your own request!');
+      }
+
+      const updateResult = await tx.attendanceRequest.updateMany({
+        where: {
+          id: requestId,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'REJECTED',
+          reviewBy: user.userId,
+          reviewAt: new Date(),
+          note,
+        },
+      });
+
+      if (updateResult.count === 0) {
+        throw new BadRequestException('Request is processing or not found!');
+      }
+
+      return tx.attendanceRequest.findUniqueOrThrow({
+        where: {
+          id: requestId,
+        },
+      });
     });
-
-    if (updateResult.count === 0) {
-      throw new BadRequestException('Request is processing or not found!');
-    }
-
-    const result = await this.prisma.client.attendanceRequest.findUniqueOrThrow(
-      {
-        where: { id: requestId },
-      },
-    );
 
     this.notificationGateway.notifyUser(result.userId, 'requestRejected', {
       requestId: result.id,
       status: 'REJECTED',
-      message: `Your request is rejected!`,
+      message: 'Your request is rejected!',
     });
 
     return result;
