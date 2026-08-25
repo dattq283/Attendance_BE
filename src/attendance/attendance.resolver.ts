@@ -10,7 +10,7 @@ import { PoliciesGuard } from '../casl/policy.guard';
 @Resolver()
 export class AttendanceResolver {
   constructor(private attendanceService: AttendanceService) {}
-  @UseGuards(GqlAuthGuard, PoliciesGuard)
+  @UseGuards(GqlAuthGuard)
   @Mutation(() => Attendance)
   checkIn(@CurrentUser('userId') userId: number) {
     return this.attendanceService.checkIn(userId);
