@@ -8,6 +8,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CaslAbilityFactory } from '../casl/casl-ability.factory';
 import { PrismaModule } from '../../prisma/prisma.module';
+import { LoginRateLimiterService } from './login-rate-limit.service';
 
 @Module({
   imports: [
@@ -23,7 +24,13 @@ import { PrismaModule } from '../../prisma/prisma.module';
     }),
     PrismaModule,
   ],
-  providers: [AuthService, AuthResolver, JwtStrategy, CaslAbilityFactory],
+  providers: [
+    AuthService,
+    AuthResolver,
+    JwtStrategy,
+    CaslAbilityFactory,
+    LoginRateLimiterService,
+  ],
   exports: [JwtModule],
 })
 export class AuthModule {}

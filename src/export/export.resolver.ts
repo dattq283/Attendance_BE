@@ -7,11 +7,13 @@ import { CheckPolicies } from '../casl/check-policy.decorator';
 import { ExportMonthlyInput } from './export-monthly.input';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ExportJob } from './export-job.entity';
+import { Throttle } from '@nestjs/throttler';
 
 @Resolver()
 export class ExportResolver {
   constructor(private readonly exportService: ExportService) {}
   @UseGuards(GqlAuthGuard, PoliciesGuard)
+  @Throttle({ default: { limit: 2, ttl: 300000 } })
   @Mutation(() => String)
   @CheckPolicies((ability) => ability.can('create', 'AttendanceReport'))
   async trgMonthlyExport(

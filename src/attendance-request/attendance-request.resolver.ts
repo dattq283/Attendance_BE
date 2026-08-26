@@ -8,12 +8,13 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { PoliciesGuard } from '../casl/policy.guard';
 import { CheckPolicies } from '../casl/check-policy.decorator';
 import { RequestStatus } from '@prisma/client';
-
+import { Throttle } from '@nestjs/throttler';
 @Resolver()
 export class AttendanceRequestResolver {
   constructor(private attendanceRequestService: AttendanceRequestService) {}
 
   @UseGuards(GqlAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Mutation(() => AttendanceRequest)
   createRequest(
     @CurrentUser('userId') userId: number,

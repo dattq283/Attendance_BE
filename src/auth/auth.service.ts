@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -8,14 +9,24 @@ import { JwtService } from '@nestjs/jwt';
 import { CreateUserInput } from './dto/create-user.input';
 import * as bcrypt from 'bcrypt';
 import { LoginInput } from './dto/login.input';
+import { ConfigService } from '@nestjs/config';
+import { LoginRateLimiterService } from './login-rate-limit.service';
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private configService: ConfigService,
+    private loginRateLimiter: LoginRateLimiterService,
   ) {}
 
   async login(input: LoginInput) {
+    const allowed = await this.loginRateLimiter.checkLoginAttemps(input.email);
+    if (!allowed) {
+      throw new BadRequestException(
+        'Too many login attempts. Please try again later.',
+      );
+    }
     const user = await this.prisma.client.user.findUnique({
       where: {
         email: input.email,
@@ -50,7 +61,8 @@ export class AuthService {
     if (existedUser) {
       throw new ConflictException('User is existing!');
     }
-    const hashedPassword = bcrypt.hashSync(input.password, 10);
+    const salts = this.configService.get<number>('BCYPT_SALT_ROUNDS', 12);
+    const hashedPassword = await bcrypt.hash(input.password, salts);
     return await this.prisma.client.user.create({
       data: {
         email: input.email,

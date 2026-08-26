@@ -13,7 +13,13 @@ interface JwtPayload {
   role: string;
 }
 
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway({
+  cors: {
+    origin:
+      process.env.ALLOWED_ORIGINS?.split(',').map((origin) => origin.trim()) ??
+      [],
+  },
+})
 export class NotificationGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
