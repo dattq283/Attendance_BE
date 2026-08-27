@@ -21,7 +21,10 @@ describe('AttendanceRequestService', () => {
         $transaction: jest.fn(),
         attendanceRequest: {
           create: jest.fn(),
-          findMany: jest.fn(),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        attendance: {
+          findMany: jest.fn().mockResolvedValue([]),
         },
       },
     };
@@ -82,6 +85,14 @@ describe('AttendanceRequestService', () => {
         data: { userId: 1, ...validInput },
       });
       expect(result).toEqual({ id: 1, ...validInput });
+    });
+
+    it('chặn khi đơn mới chồng lấn với đơn cũ đang chờ/đã duyệt', async () => {
+      prisma.client.attendanceRequest.findMany.mockResolvedValue([{ id: 2 }]);
+      await expect(service.createRequest(1, validInput)).rejects.toThrow(
+        'Request overlaps with an existing request',
+      );
+      expect(prisma.client.attendanceRequest.create).not.toHaveBeenCalled();
     });
   });
 
@@ -148,12 +159,14 @@ describe('AttendanceRequestService', () => {
             findUnique: jest.fn().mockResolvedValue(mockRequest),
             updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             findUniqueOrThrow: jest.fn().mockResolvedValue(finalResult),
+            findMany: jest.fn().mockResolvedValue([]),
           },
           attendance: {
             createMany: jest.fn().mockImplementation((args) => {
               createManyArgs = args;
               return Promise.resolve({ count: 2 });
             }),
+            findMany: jest.fn().mockResolvedValue([]),
           },
         };
         return callback(tx);
@@ -174,6 +187,35 @@ describe('AttendanceRequestService', () => {
         expect.objectContaining({ requestId: 1, status: 'APPROVED' }),
       );
       expect(result).toEqual(finalResult);
+    });
+
+    it('chặn approve khi chồng lấn với đơn khác đã APPROVED', async () => {
+      const mockRequest = {
+        id: 1,
+        userId: 10,
+        startTime: new Date('2026-08-20T08:00:00'),
+        endTime: new Date('2026-08-20T17:00:00'),
+      };
+      prisma.client.$transaction.mockImplementation(async (callback: any) => {
+        const tx = {
+          attendanceRequest: {
+            findUnique: jest.fn().mockResolvedValue(mockRequest),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            findMany: jest
+              .fn()
+              .mockResolvedValue([{ id: 2, status: 'APPROVED' }]),
+            findUniqueOrThrow: jest.fn(),
+          },
+          attendance: {
+            createMany: jest.fn(),
+          },
+        };
+        return callback(tx);
+      });
+
+      await expect(service.approveRequest(1, { userId: 99 })).rejects.toThrow(
+        'Request overlaps with an already approved request',
+      );
     });
   });
 
