@@ -10,7 +10,6 @@ import { AttendanceRequestModule } from './attendance-request/attendance-request
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PassportModule } from '@nestjs/passport';
-import { CaslAbilityFactory } from './casl/casl-ability.factory';
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 import { NotificationModule } from './notification/notification.module';
 import { ExportModule } from './export/export.module';
@@ -26,6 +25,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { Request, Response } from 'express';
 import { GqlThrottlerGuard } from './auth/gql-throttle.guard';
+import { CaslModule } from './casl/casl.module';
 @Module({
   imports: [
     BullModule.forRoot({
@@ -82,6 +82,7 @@ import { GqlThrottlerGuard } from './auth/gql-throttle.guard';
       ],
     }),
     PrismaModule,
+    CaslModule,
     AuthModule,
     UserModule,
     AttendanceModule,
@@ -93,7 +94,6 @@ import { GqlThrottlerGuard } from './auth/gql-throttle.guard';
   providers: [
     AppService,
     PrismaService,
-    CaslAbilityFactory,
     { provide: APP_GUARD, useClass: GqlThrottlerGuard },
   ],
 })

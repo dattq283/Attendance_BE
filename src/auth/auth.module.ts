@@ -6,7 +6,6 @@ import { UserModule } from '../user/user.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { CaslAbilityFactory } from '../casl/casl-ability.factory';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { LoginRateLimiterService } from './login-rate-limit.service';
 
@@ -24,13 +23,7 @@ import { LoginRateLimiterService } from './login-rate-limit.service';
     }),
     PrismaModule,
   ],
-  providers: [
-    AuthService,
-    AuthResolver,
-    JwtStrategy,
-    CaslAbilityFactory,
-    LoginRateLimiterService,
-  ],
+  providers: [AuthService, AuthResolver, JwtStrategy, LoginRateLimiterService],
   exports: [JwtModule],
 })
 export class AuthModule {}

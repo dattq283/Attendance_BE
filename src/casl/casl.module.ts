@@ -3,7 +3,7 @@ import { CaslAbilityFactory } from './casl-ability.factory';
 import { PoliciesGuard } from './policy.guard';
 @Global()
 @Module({
-  imports: [CaslAbilityFactory],
+  providers: [CaslAbilityFactory, PoliciesGuard],
   exports: [CaslAbilityFactory, PoliciesGuard],
 })
 export class CaslModule {}
