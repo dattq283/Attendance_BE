@@ -26,7 +26,7 @@ export class AttendanceRequestService {
       throw new BadRequestException('Request must be for the same day');
     }
     const now = new Date();
-    if (startTime > now && endTime <= now) {
+    if (endTime > now) {
       throw new BadRequestException('Only create request in the past times');
     }
 
