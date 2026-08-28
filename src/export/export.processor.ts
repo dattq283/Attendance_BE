@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as ExcelJS from 'exceljs';
+import { monthStart, nextMonthStart, dateKey } from '../utils/date.util';
 interface MonthlyReportData {
   exportId: string;
   month: number;
@@ -28,8 +29,8 @@ export class ExportProcessor extends WorkerHost {
       const attendances = await this.prisma.client.attendance.findMany({
         where: {
           checkTime: {
-            gte: new Date(year, month - 1, 1),
-            lt: new Date(year, month, 1),
+            gte: monthStart(year, month),
+            lt: nextMonthStart(year, month),
           },
         },
         orderBy: { checkTime: 'asc' },
@@ -45,18 +46,28 @@ export class ExportProcessor extends WorkerHost {
 
       const workBook = new ExcelJS.Workbook();
       const workSheet = workBook.addWorksheet('Attendance Report');
-      workSheet.columns = [
-        { header: 'User ID', key: 'userId', width: 15 },
-        { header: 'CheckTime', key: 'checkTime', width: 15 },
-        { header: 'Type', key: 'type', width: 15 },
-      ];
+      const rows = new Map<
+        string,
+        { userId: number; day: string; count: number }
+      >();
       attendances.forEach((a) => {
-        workSheet.addRow({
-          userId: a.userId,
-          checkTime: a.checkTime.toLocaleString('vi-VN'),
-          type: a.type,
-        });
+        const key = `${a.userId}|${dateKey(a.checkTime)}`;
+        const cur = rows.get(key);
+        if (cur) cur.count += 1;
+        else
+          rows.set(key, {
+            userId: a.userId,
+            day: dateKey(a.checkTime),
+            count: 1,
+          });
       });
+
+      workSheet.columns = [
+        { header: 'User ID', key: 'userId', width: 12 },
+        { header: 'Date', key: 'day', width: 12 },
+        { header: 'Check-in Count', key: 'count', width: 15 },
+      ];
+      rows.forEach((r) => workSheet.addRow(r));
       await workBook.xlsx.writeFile(filePath);
 
       const updatedJob = await this.prisma.client.exportJob.update({

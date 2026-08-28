@@ -59,7 +59,7 @@ describe('ExportProcessor', () => {
     data: { exportId: 'EXP-1', month: 7, year: 2026 },
   } as any;
 
-  it('gọi notifyUser nếu exportedBy có giá trị (Admin trigger tay)', async () => {
+  it('nên gọi notifyUser nếu exportedBy có giá trị (Admin trigger tay)', async () => {
     prisma.client.exportJob.update.mockResolvedValue({
       exportedBy: 99,
       exportMonth: 7,
@@ -76,7 +76,7 @@ describe('ExportProcessor', () => {
     expect(notificationGateway.notifyAdmin).not.toHaveBeenCalled();
   });
 
-  it('gọi notifyAdmin nếu exportedBy là null (Cron tự động trigger)', async () => {
+  it('nên gọi notifyAdmin nếu exportedBy là null (Cron tự động trigger)', async () => {
     prisma.client.exportJob.update.mockResolvedValue({
       exportedBy: null,
       exportMonth: 7,
@@ -92,7 +92,7 @@ describe('ExportProcessor', () => {
     expect(notificationGateway.notifyUser).not.toHaveBeenCalled();
   });
 
-  it('set status FAILED và gọi notify khi có lỗi xảy ra', async () => {
+  it('nên set status FAILED và gọi notify khi có lỗi xảy ra', async () => {
     prisma.client.attendance.findMany.mockRejectedValue(new Error('DB error'));
     prisma.client.exportJob.update.mockResolvedValue({
       exportedBy: 99,

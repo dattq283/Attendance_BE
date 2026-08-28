@@ -37,3 +37,12 @@ export function dayEnd(date: Date): Date {
   const start = dayStart(date);
   return new Date(start.getTime() + 24 * 3600000 - 1);
 }
+/** Mốc đầu tháng (00:00:00) theo múi giờ nghiệp vụ. month: 1..12 */
+export function monthStart(year: number, month: number): Date {
+  return dayStart(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+/** Mốc đầu tháng sau (giá trị <lt>) — an toàn khi month=12 */
+export function nextMonthStart(year: number, month: number): Date {
+  return dayStart(new Date(Date.UTC(year, month, 1)));
+}
