@@ -5,6 +5,7 @@ import { PoliciesGuard } from '../casl/policy.guard';
 import { CheckPolicies } from '../casl/check-policy.decorator';
 import { UserService } from './user.service';
 import { User } from './user.entity';
+import { CurrentUser } from '../auth/current-user.decorator';
 
 @Resolver()
 export class UserResolver {
@@ -13,8 +14,11 @@ export class UserResolver {
   @UseGuards(GqlAuthGuard, PoliciesGuard)
   @Mutation(() => User)
   @CheckPolicies((ability) => ability.can('delete', 'User'))
-  async softDeleteUser(@Args('userId') userId: number) {
-    return this.userService.softDeleteUser(userId);
+  async softDeleteUser(
+    @Args('userId') userId: number,
+    @CurrentUser() currentUser: { userId: number; role: string },
+  ) {
+    return this.userService.softDeleteUser(userId, currentUser.userId);
   }
 
   @UseGuards(GqlAuthGuard, PoliciesGuard)

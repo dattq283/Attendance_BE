@@ -13,7 +13,7 @@ export class User {
   @Field()
   fullName!: string;
 
-  @Field()
+  @Field(() => Role)
   role!: Role;
 
   @Field()
@@ -21,9 +21,6 @@ export class User {
 
   @Field()
   createdAt!: Date;
-
-  @Field(() => Date, { nullable: true })
-  updatedAt?: Date | null;
 
   @Field(() => Date, { nullable: true })
   deletedAt?: Date | null;
