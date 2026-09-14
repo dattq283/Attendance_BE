@@ -5,11 +5,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AttendanceService } from './attendance.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CaslAbilityFactory } from '../casl/casl-ability.factory';
+import { RedisService } from '../redis/redis.service';
 
 describe('AttendanceService', () => {
   let service: AttendanceService;
   let prisma: any;
-
+  let redis: {
+    client: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
+  };
   beforeEach(async () => {
     prisma = {
       client: {
@@ -22,11 +25,20 @@ describe('AttendanceService', () => {
       },
     };
 
+    redis = {
+      client: {
+        set: jest.fn().mockResolvedValue('OK'),
+        get: jest.fn().mockResolvedValue(null),
+        del: jest.fn().mockResolvedValue(1),
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttendanceService,
         { provide: PrismaService, useValue: prisma },
         CaslAbilityFactory, // dùng thật
+        { provide: RedisService, useValue: redis },
       ],
     }).compile();
 
@@ -65,6 +77,13 @@ describe('AttendanceService', () => {
 
       expect(prisma.client.attendance.create).toHaveBeenCalled();
       expect(result).toEqual(mockResult);
+    });
+    it('từ chối khi có request check-in khác đang xử lý (lock)', async () => {
+      redis.client.set.mockResolvedValue(null); // set trả null = không thắng khóa
+      await expect(service.checkIn(1)).rejects.toThrow(
+        'Checkin is being processed',
+      );
+      expect(prisma.client.attendance.create).not.toHaveBeenCalled();
     });
   });
 
