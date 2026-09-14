@@ -1,30 +1,59 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 
 @Injectable()
 export class LoginRateLimiterService {
+  private readonly logger = new Logger(LoginRateLimiterService.name);
   private redis: Redis;
 
   constructor() {
-    this.redis = new Redis({ host: 'localhost', port: 6379 });
+    this.redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: Number(process.env.REDIS_PORT || 6379),
+    });
   }
-  async checkLoginAttemps(
-    identifier: string,
+
+  async checkLoginAttempt(
+    email: string,
+    ip: string,
     limit = 5,
     windowSeconds = 60,
   ): Promise<boolean> {
-    const key = `login_attemps:${identifier}`;
-    const now = Date.now();
-    const windowStart = now - windowSeconds * 1000;
+    const key = `login_attempts:${email}|${ip}`;
+    try {
+      const now = Date.now();
+      const windowStart = now - windowSeconds * 1000;
+      await this.redis.zremrangebyscore(key, 0, windowStart);
+      const count = await this.redis.zcard(key);
+      return count < limit;
+    } catch (e) {
+      this.logger.warn('Redis unavailable, allowing login: ' + e);
+      return true;
+    }
+  }
 
-    await this.redis.zremrangebyscore(key, 0, windowStart);
-    const count = await this.redis.zcard(key);
+  // Gọi khi thành công → xóa bộ đếm
+  async clearLoginAttempts(email: string, ip: string): Promise<void> {
+    try {
+      await this.redis.del(`login_attempts:${email}|${ip}`);
+    } catch (e) {
+      this.logger.warn('Failed to clear counter: ' + e);
+    }
+  }
 
-    if (count >= limit) return false;
-
-    await this.redis.zadd(key, now, `${now}-${Math.random()}`);
-    await this.redis.expire(key, windowSeconds);
-
-    return true;
+  // Gọi khi thất bại → ghi 1 lần đếm
+  async recordFailedAttempt(
+    email: string,
+    ip: string,
+    windowSeconds = 60,
+  ): Promise<void> {
+    const key = `login_attempts:${email}|${ip}`;
+    try {
+      const now = Date.now();
+      await this.redis.zadd(key, now, `${now}-${Math.random()}`);
+      await this.redis.expire(key, windowSeconds);
+    } catch (e) {
+      this.logger.log('Failed to record attempt: ' + e);
+    }
   }
 }
