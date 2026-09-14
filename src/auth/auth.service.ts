@@ -20,30 +20,32 @@ export class AuthService {
     private loginRateLimiter: LoginRateLimiterService,
   ) {}
 
-  async login(input: LoginInput) {
-    const allowed = await this.loginRateLimiter.checkLoginAttemps(input.email);
+  async login(input: LoginInput, ip: string) {
+    const allowed = await this.loginRateLimiter.checkLoginAttempt(
+      input.email,
+      ip,
+    );
     if (!allowed) {
       throw new BadRequestException(
         'Too many login attempts. Please try again later.',
       );
     }
     const user = await this.prisma.client.user.findUnique({
-      where: {
-        email: input.email,
-      },
+      where: { email: input.email },
     });
-    if (!user || user.deletedAt)
+    if (!user || user.deletedAt) {
+      await this.loginRateLimiter.recordFailedAttempt(input.email, ip);
       throw new UnauthorizedException('Invalid email or password!');
-
-    // So sánh password
+    }
     const isPasswordValid = await bcrypt.compare(
       input.password,
       user.passwordHash,
     );
-    if (!isPasswordValid)
+    if (!isPasswordValid) {
+      await this.loginRateLimiter.recordFailedAttempt(input.email, ip);
       throw new UnauthorizedException('Invalid email or password!');
-
-    //Sinh token
+    }
+    await this.loginRateLimiter.clearLoginAttempts(input.email, ip);
     const accessToken = this.generateToken(user.id, user.email, user.role);
     return { accessToken, user };
   }
@@ -61,8 +63,11 @@ export class AuthService {
     if (existedUser) {
       throw new ConflictException('User is existing!');
     }
-    const salts = this.configService.get<number>('BCYPT_SALT_ROUNDS', 12);
-    const hashedPassword = await bcrypt.hash(input.password, salts);
+    const rounds = parseInt(
+      this.configService.get('BCRYPT_SALT_ROUNDS') ?? '12',
+      10,
+    );
+    const hashedPassword = await bcrypt.hash(input.password, rounds);
     return await this.prisma.client.user.create({
       data: {
         email: input.email,
