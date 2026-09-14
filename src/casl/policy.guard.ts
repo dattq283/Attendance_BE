@@ -29,9 +29,6 @@ export class PoliciesGuard implements CanActivate {
 
     // Neu khong co policy nao khai bao, mac dinh tu choi
     if (!policyHandlers || policyHandlers.length === 0) {
-      console.log(
-        `No policies declared for ${context.getClass().name}.${context.getHandler().name}!`,
-      );
       return false;
     }
     const ctx = GqlExecutionContext.create(context);

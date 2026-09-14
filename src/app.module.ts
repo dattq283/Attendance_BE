@@ -7,10 +7,10 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { AttendanceRequestModule } from './attendance-request/attendance-request.module';
-import { PrismaService } from '../prisma/prisma.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PassportModule } from '@nestjs/passport';
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
+import { join } from 'path';
 import { NotificationModule } from './notification/notification.module';
 import { ExportModule } from './export/export.module';
 import { BullModule } from '@nestjs/bullmq';
@@ -26,16 +26,20 @@ import { APP_GUARD } from '@nestjs/core';
 import { Request, Response } from 'express';
 import { GqlThrottlerGuard } from './auth/gql-throttle.guard';
 import { CaslModule } from './casl/casl.module';
+import { RedisModule } from './redis/redis.module';
 @Module({
   imports: [
-    BullModule.forRoot({
-      connection: {
-        host: 'localhost',
-        port: 6379,
-      },
+    ConfigModule.forRoot({ isGlobal: true }),
+    BullModule.forRootAsync({
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get<string>('REDIS_HOST') || 'localhost',
+          port: Number(configService.get<string>('REDIS_PORT') || 6379),
+        },
+      }),
+      inject: [ConfigService],
     }),
     ScheduleModule.forRoot(),
-    ConfigModule.forRoot({ isGlobal: true }),
     PassportModule,
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
@@ -45,7 +49,7 @@ import { CaslModule } from './casl/casl.module';
         const isDevelopment =
           configService.get<string>('NODE_ENV') !== 'production';
         return {
-          autoSchemaFile: true,
+          autoSchemaFile: join(process.cwd(), 'schema.gql'),
           sortSchema: true,
           playground: false,
           introspection: isDevelopment,
@@ -89,12 +93,9 @@ import { CaslModule } from './casl/casl.module';
     AttendanceRequestModule,
     NotificationModule,
     ExportModule,
+    RedisModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    PrismaService,
-    { provide: APP_GUARD, useClass: GqlThrottlerGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: GqlThrottlerGuard }],
 })
 export class AppModule {}

@@ -29,7 +29,11 @@ describe('AuthService', () => {
   };
   let jwtService: { sign: jest.Mock };
   let configService: { get: jest.Mock };
-  let loginRateLimiter: { checkLoginAttemps: jest.Mock };
+  let loginRateLimiter: {
+    checkLoginAttempt: jest.Mock;
+    recordFailedAttempt: jest.Mock;
+    clearLoginAttempts: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -49,7 +53,9 @@ describe('AuthService', () => {
         }),
     };
     loginRateLimiter = {
-      checkLoginAttemps: jest.fn().mockResolvedValue(true),
+      checkLoginAttempt: jest.fn().mockResolvedValue(true),
+      recordFailedAttempt: jest.fn().mockResolvedValue(undefined),
+      clearLoginAttempts: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -82,22 +88,24 @@ describe('AuthService', () => {
     };
 
     const loginInput: LoginInput = { email: 'a@b.com', password: '123456' };
+    const loginIp = '127.0.0.1';
 
     it('kiểm tra login rate limit bằng email trước khi xử lý', async () => {
       prisma.client.user.findUnique.mockResolvedValue(validUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
-      await service.login(loginInput);
+      await service.login(loginInput, loginIp);
 
-      expect(loginRateLimiter.checkLoginAttemps).toHaveBeenCalledWith(
+      expect(loginRateLimiter.checkLoginAttempt).toHaveBeenCalledWith(
         loginInput.email,
+        loginIp,
       );
     });
 
     it('throw BadRequestException khi vượt quá số lần đăng nhập cho phép', async () => {
-      loginRateLimiter.checkLoginAttemps.mockResolvedValue(false);
+      loginRateLimiter.checkLoginAttempt.mockResolvedValue(false);
 
-      await expect(service.login(loginInput)).rejects.toThrow(
+      await expect(service.login(loginInput, loginIp)).rejects.toThrow(
         BadRequestException,
       );
       expect(prisma.client.user.findUnique).not.toHaveBeenCalled();
@@ -106,7 +114,7 @@ describe('AuthService', () => {
     it('throw UnauthorizedException nếu email không tồn tại', async () => {
       prisma.client.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.login(loginInput)).rejects.toThrow(
+      await expect(service.login(loginInput, loginIp)).rejects.toThrow(
         UnauthorizedException,
       );
     });
@@ -117,7 +125,7 @@ describe('AuthService', () => {
         deletedAt: new Date(),
       });
 
-      await expect(service.login(loginInput)).rejects.toThrow(
+      await expect(service.login(loginInput, loginIp)).rejects.toThrow(
         UnauthorizedException,
       );
     });
@@ -126,7 +134,7 @@ describe('AuthService', () => {
       prisma.client.user.findUnique.mockResolvedValue(validUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(service.login(loginInput)).rejects.toThrow(
+      await expect(service.login(loginInput, loginIp)).rejects.toThrow(
         UnauthorizedException,
       );
       expect(bcrypt.compare).toHaveBeenCalledWith(
@@ -139,7 +147,7 @@ describe('AuthService', () => {
       prisma.client.user.findUnique.mockResolvedValue(validUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(service.login(loginInput)).rejects.toThrow(
+      await expect(service.login(loginInput, loginIp)).rejects.toThrow(
         UnauthorizedException,
       );
       expect(jwtService.sign).not.toHaveBeenCalled();
@@ -149,7 +157,7 @@ describe('AuthService', () => {
       prisma.client.user.findUnique.mockResolvedValue(validUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
-      const result = await service.login(loginInput);
+      const result = await service.login(loginInput, loginIp);
 
       expect(bcrypt.compare).toHaveBeenCalledWith(
         loginInput.password,
@@ -163,7 +171,7 @@ describe('AuthService', () => {
       prisma.client.user.findUnique.mockResolvedValue(validUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
-      await service.login(loginInput);
+      await service.login(loginInput, loginIp);
 
       expect(jwtService.sign).toHaveBeenCalledWith({
         sub: validUser.id,
@@ -189,14 +197,13 @@ describe('AuthService', () => {
       expect(prisma.client.user.create).not.toHaveBeenCalled();
     });
 
-    it('đọc BCYPT_SALT_ROUNDS từ config, mặc định 12 nếu không có', async () => {
+    it('đọc BCRYPT_SALT_ROUNDS từ config, mặc định 12 nếu không có', async () => {
       prisma.client.user.findUnique.mockResolvedValue(null);
       prisma.client.user.create.mockResolvedValue({ id: 2 });
 
       await service.createUser(createUserInput);
 
-      expect(configService.get).toHaveBeenCalledWith('BCYPT_SALT_ROUNDS', 12);
-      // mock trả defaultValue (tức 12) khi không có env var đặt giá trị
+      expect(configService.get).toHaveBeenCalledWith('BCRYPT_SALT_ROUNDS');
       expect(bcrypt.hash).toHaveBeenCalledWith('plain123', 12);
     });
 

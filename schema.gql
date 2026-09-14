@@ -11,22 +11,22 @@ type Attendance {
 }
 
 type AttendanceRequest {
-  attendanceId: ID
   createdAt: DateTime!
+  endTime: DateTime!
   id: ID!
   note: String
   reason: String!
-  requestTime: DateTime!
   reviewAt: DateTime
   reviewBy: ID
+  startTime: DateTime!
   status: RequestStatus!
-  updatedAt: DateTime
   userId: ID!
 }
 
 input AttendanceRequestInput {
+  endTime: DateTime!
   reason: String!
-  requestTime: DateTime!
+  startTime: DateTime!
 }
 
 enum AttendanceType {
@@ -39,10 +39,40 @@ type AuthResponse {
   user: User!
 }
 
+input CreateUserInput {
+  email: String!
+  fullName: String!
+  password: String!
+}
+
 """
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
 scalar DateTime
+
+type ExportJob {
+  completedTime: DateTime
+  exportId: String!
+  exportMonth: Int!
+  exportYear: Int!
+  exportedBy: ID
+  id: ID!
+  path: String
+  reason: String
+  status: ExportStatus!
+}
+
+input ExportMonthlyInput {
+  month: Int!
+  year: Int!
+}
+
+enum ExportStatus {
+  DONE
+  FAILED
+  PROCESSING
+  QUEUED
+}
 
 input LoginInput {
   email: String!
@@ -50,23 +80,21 @@ input LoginInput {
 }
 
 type Mutation {
-  approveRequest(requestId: Float!): AttendanceRequest!
+  approveRequest(requestId: Int!): AttendanceRequest!
   checkIn: Attendance!
   createRequest(input: AttendanceRequestInput!): AttendanceRequest!
+  createUser(input: CreateUserInput!): User!
   login(input: LoginInput!): AuthResponse!
-  register(input: RegisterInput!): AuthResponse!
-  rejectRequest(note: String, requestId: Float!): AttendanceRequest!
+  reactiveUser(userId: Float!): User!
+  rejectRequest(note: String, requestId: Int!): AttendanceRequest!
+  softDeleteUser(userId: Float!): User!
+  trgMonthlyExport(input: ExportMonthlyInput!): String!
 }
 
 type Query {
+  getExportReport(exportId: String!): ExportJob
   showHistory(from: DateTime, to: DateTime): [Attendance!]!
   showRequestList(status: RequestStatus): [AttendanceRequest!]!
-}
-
-input RegisterInput {
-  email: String!
-  fullName: String!
-  password: String!
 }
 
 enum RequestStatus {
@@ -75,11 +103,16 @@ enum RequestStatus {
   REJECTED
 }
 
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
 type User {
   createdAt: DateTime!
+  deletedAt: DateTime
   email: String!
   fullName: String!
   id: ID!
-  role: String!
-  updatedAt: DateTime
+  role: Role!
 }
