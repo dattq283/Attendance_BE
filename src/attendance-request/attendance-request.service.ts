@@ -72,7 +72,13 @@ export class AttendanceRequestService {
       },
     });
   }
-  async approveRequest(requestId: number, user: { userId: number }) {
+  async approveRequest(
+    requestId: number,
+    user: { userId: number; role: string },
+  ) {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Only admin can approve requests!');
+    }
     const result = await this.prisma.client.$transaction(async (tx) => {
       const request = await tx.attendanceRequest.findUnique({
         where: { id: requestId },
@@ -140,19 +146,27 @@ export class AttendanceRequestService {
         },
       });
     });
-    this.notificationGateway.notifyUser(result.userId, 'requestApproved', {
-      requestId: result.id,
-      status: 'APPROVED',
-      message: 'Your request is approved!',
-    });
+    try {
+      this.notificationGateway.notifyUser(result.userId, 'requestApproved', {
+        requestId: result.id,
+        status: 'APPROVED',
+        message: 'Your request is approved!',
+      });
+    } catch (e) {
+      console.log('Notification failed after approval', e);
+    }
+
     return result;
   }
 
   async rejectRequest(
     requestId: number,
-    user: { userId: number },
+    user: { userId: number; role: string },
     note?: string,
   ): Promise<AttendanceRequest> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Only admin can reject requests!');
+    }
     const result = await this.prisma.client.$transaction(async (tx) => {
       const request = await tx.attendanceRequest.findUnique({
         where: {

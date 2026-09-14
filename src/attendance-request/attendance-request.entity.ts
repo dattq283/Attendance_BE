@@ -36,10 +36,4 @@ export class AttendanceRequest {
 
   @Field(() => Date)
   createdAt!: Date;
-
-  @Field(() => Date, { nullable: true })
-  updatedAt?: Date | null;
-
-  @Field(() => ID, { nullable: true })
-  attendanceId?: number | null;
 }

@@ -106,9 +106,9 @@ describe('AttendanceRequestService', () => {
         return callback(tx);
       });
 
-      await expect(service.approveRequest(999, { userId: 5 })).rejects.toThrow(
-        'Request not found!',
-      );
+      await expect(
+        service.approveRequest(999, { userId: 5, role: 'ADMIN' }),
+      ).rejects.toThrow('Request not found!');
     });
 
     it('chặn admin tự duyệt đơn của chính mình (ForbiddenException)', async () => {
@@ -121,9 +121,9 @@ describe('AttendanceRequestService', () => {
         return callback(tx);
       });
 
-      await expect(service.approveRequest(1, { userId: 5 })).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.approveRequest(1, { userId: 5, role: 'ADMIN' }),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throw nếu đơn đã bị xử lý bởi request khác (race condition)', async () => {
@@ -137,9 +137,9 @@ describe('AttendanceRequestService', () => {
         return callback(tx);
       });
 
-      await expect(service.approveRequest(1, { userId: 5 })).rejects.toThrow(
-        'Request is processing or not found!',
-      );
+      await expect(
+        service.approveRequest(1, { userId: 5, role: 'ADMIN' }),
+      ).rejects.toThrow('Request is processing or not found!');
     });
 
     it('tạo 2 bản ghi Attendance và gửi thông báo khi duyệt thành công', async () => {
@@ -172,7 +172,10 @@ describe('AttendanceRequestService', () => {
         return callback(tx);
       });
 
-      const result = await service.approveRequest(1, { userId: 99 });
+      const result = await service.approveRequest(1, {
+        userId: 99,
+        role: 'ADMIN',
+      });
 
       expect(createManyArgs.data).toHaveLength(2);
       expect(createManyArgs.data[0]).toMatchObject({
@@ -213,9 +216,9 @@ describe('AttendanceRequestService', () => {
         return callback(tx);
       });
 
-      await expect(service.approveRequest(1, { userId: 99 })).rejects.toThrow(
-        'Request overlaps with an already approved request',
-      );
+      await expect(
+        service.approveRequest(1, { userId: 99, role: 'ADMIN' }),
+      ).rejects.toThrow('Request overlaps with an already approved request');
     });
   });
 
@@ -229,9 +232,9 @@ describe('AttendanceRequestService', () => {
         return callback(tx);
       });
 
-      await expect(service.rejectRequest(999, { userId: 5 })).rejects.toThrow(
-        'Request not found!',
-      );
+      await expect(
+        service.rejectRequest(999, { userId: 5, role: 'ADMIN' }),
+      ).rejects.toThrow('Request not found!');
     });
 
     it('chặn tự từ chối đơn của chính mình (ForbiddenException)', async () => {
@@ -244,9 +247,9 @@ describe('AttendanceRequestService', () => {
         return callback(tx);
       });
 
-      await expect(service.rejectRequest(1, { userId: 5 })).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.rejectRequest(1, { userId: 5, role: 'ADMIN' }),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throw nếu đơn đã bị xử lý trước đó', async () => {
@@ -260,9 +263,9 @@ describe('AttendanceRequestService', () => {
         return callback(tx);
       });
 
-      await expect(service.rejectRequest(1, { userId: 5 })).rejects.toThrow(
-        'Request is processing or not found!',
-      );
+      await expect(
+        service.rejectRequest(1, { userId: 5, role: 'ADMIN' }),
+      ).rejects.toThrow('Request is processing or not found!');
     });
 
     it('reject thành công và gửi thông báo', async () => {
@@ -282,7 +285,7 @@ describe('AttendanceRequestService', () => {
 
       const result = await service.rejectRequest(
         1,
-        { userId: 99 },
+        { userId: 99, role: 'ADMIN' },
         'Không hợp lệ',
       );
 

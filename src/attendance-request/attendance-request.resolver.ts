@@ -1,4 +1,4 @@
-import { Mutation, Resolver, Args, Query } from '@nestjs/graphql';
+import { Mutation, Resolver, Args, Query, Int } from '@nestjs/graphql';
 import { AttendanceRequestService } from './attendance-request.service';
 import { UseGuards } from '@nestjs/common';
 import { GqlAuthGuard } from '../auth/gql-auth.guard';
@@ -39,7 +39,7 @@ export class AttendanceRequestResolver {
   @CheckPolicies((ability) => ability.can('update', 'AttendanceRequest'))
   approveRequest(
     @CurrentUser() user: { userId: number; role: string },
-    @Args('requestId') requestId: number,
+    @Args('requestId', { type: () => Int }) requestId: number,
   ) {
     return this.attendanceRequestService.approveRequest(requestId, user);
   }
@@ -49,7 +49,7 @@ export class AttendanceRequestResolver {
   @CheckPolicies((ability) => ability.can('update', 'AttendanceRequest'))
   rejectRequest(
     @CurrentUser() user: { userId: number; role: string },
-    @Args('requestId') requestId: number,
+    @Args('requestId', { type: () => Int }) requestId: number,
     @Args('note', { nullable: true }) note?: string,
   ) {
     return this.attendanceRequestService.rejectRequest(requestId, user, note);
