@@ -20,6 +20,9 @@ export class ExportProcessor extends WorkerHost {
     super();
   }
   async process(job: Job<MonthlyReportData>): Promise<void> {
+    if (job.name !== 'generateMonthlyReport') {
+      throw new Error(`Unknown job name: ${job.name}`);
+    }
     const { exportId, month, year } = job.data;
     try {
       await this.prisma.client.exportJob.updateMany({
@@ -34,6 +37,7 @@ export class ExportProcessor extends WorkerHost {
           },
         },
         orderBy: { checkTime: 'asc' },
+        include: { user: { select: { fullName: true } } },
       });
       const folderPath = path.join(
         process.cwd(),
@@ -48,7 +52,7 @@ export class ExportProcessor extends WorkerHost {
       const workSheet = workBook.addWorksheet('Attendance Report');
       const rows = new Map<
         string,
-        { userId: number; day: string; count: number }
+        { userId: number; fullName: string; day: string; count: number }
       >();
       attendances.forEach((a) => {
         const key = `${a.userId}|${dateKey(a.checkTime)}`;
@@ -57,6 +61,7 @@ export class ExportProcessor extends WorkerHost {
         else
           rows.set(key, {
             userId: a.userId,
+            fullName: a.user.fullName,
             day: dateKey(a.checkTime),
             count: 1,
           });
@@ -64,6 +69,7 @@ export class ExportProcessor extends WorkerHost {
 
       workSheet.columns = [
         { header: 'User ID', key: 'userId', width: 12 },
+        { header: 'Full Name', key: 'fullName', width: 20 },
         { header: 'Date', key: 'day', width: 12 },
         { header: 'Check-in Count', key: 'count', width: 15 },
       ];
@@ -72,9 +78,18 @@ export class ExportProcessor extends WorkerHost {
 
       const updatedJob = await this.prisma.client.exportJob.update({
         where: { exportId },
-        data: { status: 'DONE', path: filePath, completedTime: new Date() },
+        data: {
+          status: 'DONE',
+          path: `/exports/${month}-${year}/${exportId}.xlsx`,
+          completedTime: new Date(),
+        },
       });
-      console.log('Export completed:', { exportId, month, year, filePath });
+      console.log('Export completed:', {
+        exportId,
+        month,
+        year,
+        filePath: `/exports/${month}-${year}/${exportId}.xlsx`,
+      });
       if (updatedJob.exportedBy) {
         this.notificationGateway.notifyUser(
           updatedJob.exportedBy,
@@ -84,6 +99,7 @@ export class ExportProcessor extends WorkerHost {
             month,
             year,
             message: `${month}/${year} report is ready!`,
+            path: `/exports/${month}-${year}/${exportId}.xlsx`,
           },
         );
       } else {
@@ -96,29 +112,49 @@ export class ExportProcessor extends WorkerHost {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log('Export failed:', { exportId, month, year, error: message });
-      const updatedJob = await this.prisma.client.exportJob.update({
-        where: { exportId },
-        data: { status: 'FAILED', reason: message, completedTime: new Date() },
-      });
-      if (updatedJob.exportedBy) {
-        this.notificationGateway.notifyUser(
-          updatedJob.exportedBy,
-          'exportFailed',
+      const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      if (!isLastAttempt) {
+        console.log(
+          `Export attempt ${job.attemptsMade + 1} failed. Trying again...`,
           {
             exportId,
             month,
             year,
-            reason: message,
+            error: message,
           },
         );
-      } else {
-        this.notificationGateway.notifyAdmin('exportFailed', {
-          exportId,
-          month,
-          year,
-          reason: message,
+        throw error;
+      }
+      try {
+        const updatedJob = await this.prisma.client.exportJob.update({
+          where: { exportId },
+          data: {
+            status: 'FAILED',
+            reason: message,
+            completedTime: new Date(),
+          },
         });
+        if (updatedJob.exportedBy) {
+          this.notificationGateway.notifyUser(
+            updatedJob.exportedBy,
+            'exportFailed',
+            {
+              exportId,
+              month,
+              year,
+              reason: message,
+            },
+          );
+        } else {
+          this.notificationGateway.notifyAdmin('exportFailed', {
+            exportId,
+            month,
+            year,
+            reason: message,
+          });
+        }
+      } catch {
+        console.log('Failed to export record');
       }
       throw error;
     }

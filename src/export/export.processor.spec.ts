@@ -56,10 +56,13 @@ describe('ExportProcessor', () => {
   afterEach(() => jest.clearAllMocks());
 
   const mockJob = {
+    name: 'generateMonthlyReport',
     data: { exportId: 'EXP-1', month: 7, year: 2026 },
+    attemptsMade: 2, // lần cuối (2+1 >= 3) — để nhánh FAILED được chạy
+    opts: { attempts: 3 },
   } as any;
 
-  it('nên gọi notifyUser nếu exportedBy có giá trị (Admin trigger tay)', async () => {
+  it('gọi notifyUser nếu exportedBy có giá trị (Admin trigger tay)', async () => {
     prisma.client.exportJob.update.mockResolvedValue({
       exportedBy: 99,
       exportMonth: 7,
@@ -76,7 +79,7 @@ describe('ExportProcessor', () => {
     expect(notificationGateway.notifyAdmin).not.toHaveBeenCalled();
   });
 
-  it('nên gọi notifyAdmin nếu exportedBy là null (Cron tự động trigger)', async () => {
+  it('gọi notifyAdmin nếu exportedBy là null (Cron tự động trigger)', async () => {
     prisma.client.exportJob.update.mockResolvedValue({
       exportedBy: null,
       exportMonth: 7,
@@ -92,7 +95,7 @@ describe('ExportProcessor', () => {
     expect(notificationGateway.notifyUser).not.toHaveBeenCalled();
   });
 
-  it('nên set status FAILED và gọi notify khi có lỗi xảy ra', async () => {
+  it('set status FAILED và gọi notify khi có lỗi xảy ra (lần thử cuối)', async () => {
     prisma.client.attendance.findMany.mockRejectedValue(new Error('DB error'));
     prisma.client.exportJob.update.mockResolvedValue({
       exportedBy: 99,
@@ -112,5 +115,30 @@ describe('ExportProcessor', () => {
       'exportFailed',
       expect.any(Object),
     );
+  });
+
+  it('không chốt FAILED và không notify khi chưa phải lần thử cuối (vẫn retry)', async () => {
+    prisma.client.attendance.findMany.mockRejectedValue(new Error('DB error'));
+    prisma.client.exportJob.update.mockResolvedValue({
+      exportedBy: 99,
+      exportMonth: 7,
+      exportYear: 2026,
+    });
+
+    const retryJob = {
+      name: 'generateMonthlyReport',
+      data: { exportId: 'EXP-1', month: 7, year: 2026 },
+      attemptsMade: 0, // lần 1 trong 3 → chưa phải cuối
+      opts: { attempts: 3 },
+    } as any;
+
+    await expect(processor.process(retryJob)).rejects.toThrow('DB error');
+
+    expect(prisma.client.exportJob.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'FAILED' }),
+      }),
+    );
+    expect(notificationGateway.notifyUser).not.toHaveBeenCalled();
   });
 });
