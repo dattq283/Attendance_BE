@@ -1,20 +1,25 @@
-# Attendance System — Backend
+# Attendance App (Attendance_BE)
 
-Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + Prisma + MySQL**, áp dụng phân quyền theo **CASL** (field-level authorization) kết hợp **PoliciesGuard** cho các trường hợp phân quyền phức tạp. Bổ sung thông báo **real-time qua WebSocket** cho các thao tác duyệt/từ chối đơn, và **export báo cáo chấm công tháng** ra Excel.
+Hệ thống chấm công (check-in) cho nhân viên — backend **NestJS + GraphQL (code-first) + Prisma/MySQL + BullMQ/Redis**, phân quyền **JWT + CASL**, thông báo **WebSocket** real-time và **export báo cáo Excel** theo tháng.
+
+---
 
 ## Mục lục
 
 - [Công nghệ sử dụng](#công-nghệ-sử-dụng)
 - [Kiến trúc tổng quan](#kiến-trúc-tổng-quan)
 - [Cấu trúc thư mục](#cấu-trúc-thư-mục)
-- [Schema Database](#schema-database)
-- [Cài đặt & Chạy dự án](#cài-đặt--chạy-dự-án)
+- [Yêu cầu & Cài đặt](#yêu-cầu--cài-đặt)
+- [Chạy dự án](#chạy-dự-án)
+- [Biến môi trường (.env)](#biến-môi-trường-env)
 - [Xác thực & Phân quyền](#xác-thực--phân-quyền)
-- [Danh sách API](#danh-sách-api)
-- [Luồng nghiệp vụ chính](#luồng-nghiệp-vụ-chính)
+- [GraphQL API](#graphql-api)
+- [Nghiệp vụ chính](#nghiệp-vụ-chính)
 - [Thông báo Real-time (WebSocket)](#thông-báo-real-time-websocket)
-- [Export Báo cáo Tháng](#export-báo-cáo-tháng)
-- [Trạng thái hoàn thành](#trạng-thái-hoàn-thành)
+- [Export báo cáo tháng](#export-báo-cáo-tháng)
+- [Schema Database](#schema-database)
+- [Testing](#testing)
+- [Lưu ý](#lưu-ý)
 
 ---
 
@@ -22,251 +27,256 @@ Backend cho ứng dụng chấm công, xây dựng bằng **NestJS + GraphQL + P
 
 | Thành phần | Công nghệ |
 |---|---|
-| Framework | NestJS |
-| API | GraphQL (Apollo Server, code-first) |
-| ORM | Prisma 6 |
-| Database | MySQL |
-| Xác thực | JWT (Passport) |
+| Framework | NestJS 11 |
+| API | GraphQL code-first (Apollo Server, `autoSchemaFile: true`, schema tự sinh tại `schema.gql`) |
+| ORM / DB | Prisma 6 + MySQL |
+| Xác thực | Passport JWT, bcrypt |
 | Phân quyền | CASL (`@casl/ability`, `@casl/prisma`) + `PoliciesGuard` |
-| Real-time | Socket.io (NestJS Gateway) |
-| Validate | class-validator |
-| Hash password | bcrypt |
-| Job Queue | BullMQ + Redis |
-| Scheduled Jobs | @nestjs/schedule |
-| Report Export | ExcelJS (XLSX) |
+| Redis | ioredis (queue, lock check-in, rate-limit login, Socket.IO adapter) |
+| Job Queue | BullMQ |
+| Cron | @nestjs/schedule (TZ `Asia/Ho_Chi_Minh`) |
+| Real-time | Socket.IO (NestJS Gateway + Redis adapter) |
+| Report | ExcelJS (XLSX) |
+| Validate | class-validator + ValidationPipe (whitelist, forbidNonWhitelisted) |
+| Rate limit | @nestjs/throttler (`GqlThrottlerGuard`) |
+| Test | Jest (ts-jest, unit test) |
+
+---
 
 ## Kiến trúc tổng quan
-
 **Luồng xử lý 1 request GraphQL:**
 
-1. Client gửi GraphQL query/mutation qua `POST /graphql`
-2. `GqlAuthGuard` — xác thực JWT, gắn thông tin user vào request
-3. `PoliciesGuard` (CASL, qua `@CheckPolicies(...)`) — kiểm tra quyền truy cập trên những API yêu cầu phân quyền
-4. `Resolver` — nhận request, gọi xuống Service tương ứng
-5. `Service` — xử lý logic nghiệp vụ, gọi Prisma
-6. `PrismaService` — thực thi truy vấn xuống MySQL
-7. (Với `approveRequest`/`rejectRequest`) Service gọi thêm `NotificationGateway` để bắn sự kiện real-time cho đúng user liên quan
+1. Client gửi query/mutation qua `POST /graphql` (header `Authorization: Bearer <token>` nếu cần đăng nhập)
+2. `GqlAuthGuard` — xác thực JWT, kiểm tra user còn **active** (`deletedAt` null), gắn user vào request
+3. `PoliciesGuard` (CASL, qua `@CheckPolicies(...)`) — kiểm tra quyền truy cập
+4. `Resolver` → `Service` (logic nghiệp vụ) → `PrismaService` (MySQL)
+5. Với luồng export: Service enqueue job vào BullMQ, `ExportProcessor` xử lý bất đồng bộ
+6. `NotificationGateway` bắn sự kiện WebSocket (duyệt/từ chối đơn, export xong/fail)
 
-Ứng dụng tổ chức theo **feature-based module** (mỗi tính năng 1 thư mục riêng, tự chứa entity/service/resolver), không gộp theo layer kỹ thuật — giúp dễ mở rộng và dễ tra cứu khi dự án lớn dần.
+**Tổ chức theo feature-based module** — mỗi tính năng 1 thư mục chứa entity/service/resolver riêng.
+
+---
 
 ## Cấu trúc thư mục
 
-- `src/`
-  - `auth/` — Đăng ký, đăng nhập, JWT
-    - `auth.module.ts`
-    - `auth.service.ts`
-    - `auth.resolver.ts`
-    - `jwt.strategy.ts`
-    - `gql-auth.guard.ts`
-    - `gql-throttle.guard.ts`
-    - `current-user.decorator.ts`
-    - `login-rate-limit.service.ts`
-  - `casl/` — Phân quyền field-level dùng chung nhiều module (module **global**)
-    - `casl.module.ts`
-    - `casl-ability.factory.ts`
-    - `policy.guard.ts`
-    - `check-policy.decorator.ts`
-  - `prisma/` — Kết nối database dùng chung
-    - `prisma.module.ts`
-    - `prisma.service.ts`
-  - `notification/` — Gateway WebSocket, bắn sự kiện real-time
-    - `notification.module.ts`
-    - `notification.gateway.ts`
-  - `user/`
-  - `attendance/` — Chấm công, xem lịch sử
-    - `attendance.module.ts`
-    - `attendance.service.ts`
-    - `attendance.resolver.ts`
-    - `attendance.entity.ts`
-  - `attendance-request/` — Đơn xin chấm công ngoài
-    - `attendance-request.module.ts`
-    - `attendance-request.service.ts`
-    - `attendance-request.resolver.ts`
-    - `attendance-request.input.ts`
-    - `attendance-request.entity.ts`
-  - `export/` — Export báo cáo chấm công tháng
-    - `export.service.ts` (queueing)
-    - `export.processor.ts` (BullMQ job worker)
-    - `export-cron.service.ts` (scheduled task tự động)
-    - `export.resolver.ts`
-    - `export.module.ts`
-  - `utils/` — Các hàm bổ trợ
-    - `date.util.ts` (biên ngày/tháng theo múi giờ `Asia/Ho_Chi_Minh`)
-  - `app.module.ts`
-  - `main.ts`
+```
+src/
+├── app.module.ts          # Root module: GraphQL, Throttler, BullMQ, Prisma, Redis...
+├── main.ts                # Bootstrap: static assets /exports, ValidationPipe, trust proxy
+├── auth/                  # login, JWT strategy, GqlAuthGuard, gql-throttle.guard, login rate-limit, createUser
+├── casl/                  # CASL ability factory, PoliciesGuard, CheckPolicies decorator (global)
+├── prisma/                # PrismaService + PrismaModule (global)
+├── user/                  # User entity, softDeleteUser, reactiveUser
+├── attendance/            # checkIn, showHistory
+├── attendance-request/    # createRequest, showRequestList, approveRequest, rejectRequest
+├── export/                # trgMonthlyExport, getExportReport, ExportProcessor (BullMQ), ExportCronService
+├── notification/          # NotificationGateway (Socket.IO)
+├── redis/                 # RedisService (@Global), RedisModule, RedisIoAdapter (Socket.IO)
+└── utils/                 # date.util (múi giờ Asia/Ho_Chi_Minh, dùng Intl — không dayjs)
+```
 
-## Schema Database
+---
 
-Hệ thống có 3 bảng chính:
+## Yêu cầu & Cài đặt
 
-**User** — tài khoản, có `role` (`ADMIN` / `EMPLOYEE`), password được hash bằng bcrypt.
-
-**Attendance** — lịch sử chấm công thực tế.
-- `type: NORMAL` — chấm công qua API `checkin` bình thường
-- `type: MANUAL` — sinh ra tự động khi một đơn xin chấm công ngoài được duyệt
-
-**AttendanceRequest** — đơn xin chấm công ngoài.
-- `status: PENDING | APPROVED | REJECTED`
-- Khi `APPROVED`, hệ thống tự tạo **2 bản ghi `Attendance`** có `type = MANUAL`:
-  - bản 1 có `checkTime = startTime`
-  - bản 2 có `checkTime = endTime`
-- Điều này đảm bảo API xem lịch sử chỉ cần truy vấn đúng 1 bảng `Attendance`.
-
-Xem chi tiết đầy đủ tại `prisma/schema.prisma`.
-
-## Cài đặt & Chạy dự án
-
-### Yêu cầu
-- Node.js
-- MySQL đang chạy (local hoặc Docker)
-- Redis đang chạy (cho BullMQ export)
-
-### Các bước
+**Yêu cầu:** Node.js ≥ 20, MySQL, Redis (bắt buộc — dùng cho queue export, lock check-in, rate-limit login, Socket.IO adapter).
 
 ```bash
-# Cài dependency
+# 1. Cài dependencies
 npm install
 
-# Tạo file .env (xem biến môi trường bên dưới)
+# 2. Tạo .env từ mẫu có sẵn (.env.example)
+cp .env.example .env          # hoặc PowerShell: Copy-Item .env.example .env
 
-# Chạy migration
+# 3. Migration + (tùy chọn) seed admin
 npx prisma migrate dev
-
-# Generate Prisma Client
-npx prisma generate
-
-# (Tuỳ chọn) Tạo tài khoản ADMIN qua seed
 npx prisma db seed
 
-# Chạy ứng dụng (dev mode)
+# 4. Chạy dev
 npm run start:dev
 ```
 
-Ứng dụng chạy tại `http://localhost:3000/graphql` (Apollo Sandbox). Kết nối WebSocket qua cùng port `3000`.
+Ứng dụng chạy tại `http://localhost:3000/graphql` (Apollo Sandbox). WebSocket cùng port `3000`.
 
-### Biến môi trường (.env)
+---
 
-```env
-DATABASE_URL="mysql://<user>:<password>@localhost:3306/attendance_db"
-JWT_SECRET="<chuỗi bí mật ngẫu nhiên>"
+## Chạy dự án
 
-# Dùng cho prisma seed tạo ADMIN ban đầu
-ADMIN_EMAIL="admin@gmail.com"
-ADMIN_PASSWORD="admin123"
+| Lệnh | Mô tả |
+|---|---|
+| `npm run start:dev` | Development (watch mode — tự build khi sửa file) |
+| `npm run build` | Build ra `dist/` (bắt buộc trước khi chạy prod) |
+| `npm run start:prod` | `node dist/main` — chạy bản đã build |
+| `npm test` | Chạy unit test (jest) |
+| `npm run lint` / `format` | ESLint (tự sửa) / Prettier |
 
-# Redis (nếu không dùng default localhost:6379)
-REDIS_URL="redis://localhost:6379"
-```
+> ⚠️ `start:prod` chạy `node dist/main` — nếu **chưa `npm run build`** sẽ lỗi `Cannot find module 'dist/main'`.
 
-> Redis **bắt buộc** để chạy export job queue (BullMQ).
+---
 
-### Tạo tài khoản ADMIN
+## Biến môi trường (.env)
 
-Cách khuyến nghị: điền `ADMIN_EMAIL` / `ADMIN_PASSWORD` trong `.env`, rồi chạy:
+Tham khảo đầy đủ tại `.env.example`:
+
+| Biến | Mô tả | Mặc định |
+|---|---|---|
+| `DATABASE_URL` | Chuỗi kết nối MySQL: `mysql://user:pass@host:3306/db` | **bắt buộc** |
+| `JWT_SECRET` | Khóa ký JWT | **bắt buộc** |
+| `ALLOWED_ORIGINS` | Danh sách origin được phép CORS / WebSocket (cách nhau dấu phẩy) | rỗng |
+| `NODE_ENV` | `development` / `production` | — |
+| `BCRYPT_SALT_ROUNDS` | Số vòng salt bcrypt cho mật khẩu | `12` |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Tài khoản admin mặc định (dùng trong seed) | — |
+| `REDIS_HOST` | Host Redis — **mọi consumer đọc qua env này** | `localhost` |
+| `REDIS_PORT` | Port Redis | `6379` |
+| `PORT` | Port HTTP server | `3000` |
+
+> ⚠️ Code **chỉ đọc** `REDIS_HOST` / `REDIS_PORT` (dùng `||` fallback `localhost`/`6379` khi env rỗng hoặc không đặt). **Không có biến `REDIS_URL`.**
+
+**Seed admin:**
 
 ```bash
 npx prisma db seed
 ```
 
-Seed sẽ tạo (upsert) một admin với `role = ADMIN` nếu chưa tồn tại, dùng bcrypt để hash password. *(Không cần tự sửa `role` qua Prisma Studio như phiên bản trước.)*
+Seed tạo (upsert) một admin `role = ADMIN` từ `ADMIN_EMAIL`/`ADMIN_PASSWORD` nếu chưa tồn tại, mật khẩu hash bằng bcrypt — không cần sửa DB tay.
+
+---
 
 ## Xác thực & Phân quyền
 
-### Xác thực (Authentication)
+### Authentication
 
-Dùng JWT — sau khi `login`/`register` thành công, client nhận `accessToken`, gửi kèm mọi request cần đăng nhập qua header:
+- Sau khi `login` thành công, client nhận `accessToken`; gửi qua header:
+  ```
+  Authorization: Bearer <accessToken>
+  ```
+- `GqlAuthGuard` (passport-jwt) xác thực token + **kiểm tra `deletedAt`** (user bị soft-delete sẽ bị từ chối 401) + gắn `{ userId, username, role }` vào request.
+- Cùng token dùng để xác thực WebSocket handshake.
 
-```
-Authorization: Bearer <accessToken>
-```
+### Authorization (CASL)
 
-`GqlAuthGuard` chịu trách nhiệm xác thực token và gắn thông tin user (`userId`, `role`) vào request. Cùng một `accessToken` này cũng được dùng để xác thực kết nối WebSocket (xem phần [Thông báo Real-time](#thông-báo-real-time-websocket)).
+- `PoliciesGuard` + `@CheckPolicies(ability => ability.can(action, subject))` đọc rule từ `casl-ability.factory.ts`.
+- **ADMIN** → `can('manage', 'all')`.
+- **EMPLOYEE** → `create`/`read` giới hạn theo `{ userId: user.userId }` (dữ liệu của chính mình).
+- Điều kiện rule được chuyển thành **filter dòng (row-level)** qua `accessibleBy()` của `@casl/prisma` — ví dụ EMPLOYEE chỉ thấy attendance/request của mình khi query. *(Không phải field-level authorization — đây là lọc theo bản ghi/dòng.)*
+- `CaslModule` global — `CaslAbilityFactory` + `PoliciesGuard` dùng chung toàn hệ thống.
+- Thêm role mới chỉ cần sửa `casl-ability.factory.ts`, không cần đổi Guard.
 
-### Phân quyền (Authorization)
+### Rate limit
 
-- **`PoliciesGuard` + CASL (`@CheckPolicies(...)`)** — dùng cho các API cần lọc dữ liệu theo điều kiện field-level (ví dụ: EMPLOYEE chỉ được xem lịch sử / đơn của chính mình, ADMIN xem được toàn bộ). CASL rule được định nghĩa tập trung tại `casl-ability.factory.ts`, tự động chuyển thành điều kiện Prisma `where` qua `accessibleBy()`.
-- `CaslModule` là module **global** — cung cấp `CaslAbilityFactory` và `PoliciesGuard` cho toàn hệ thống, không cần khai báo lại tại từng module.
+| Vùng | Giới hạn |
+|---|---|
+| Global (`GqlThrottlerGuard`) | 10 request/phút |
+| `login` (Redis `login_attempts:<email>|<ip>`) | 5 lần/phút theo email + IP |
+| `createRequest` | 5 lần/phút |
+| `trgMonthlyExport` | 2 lần/5 phút |
 
-Thêm role mới trong tương lai chỉ cần chỉnh sửa `casl-ability.factory.ts`, không cần sửa Guard.
+- Login rate limiter và lock check-in **fail-open**: Redis lỗi → cho qua (log cảnh báo), không chặn người dùng.
+- `main.ts` set `trust proxy = 'loopback'` — `req.ip` lấy đúng IP client khi đứng sau reverse proxy cùng máy.
 
-## Danh sách API
+---
 
-Toàn bộ API là GraphQL Query/Mutation qua endpoint `/graphql`.
+## GraphQL API
 
-| API | Loại | Yêu cầu | Guard |
+Endpoint: `POST /graphql` (dev có Apollo Sandbox). Schema đầy đủ: `schema.gql`.
+
+### Mutation
+
+| Mutation | Tham số | Guard / Policy | Mô tả |
 |---|---|---|---|
-| `register(input)` | Mutation | Không cần đăng nhập | — |
-| `login(input)` | Mutation | Không cần đăng nhập | — |
-| `checkin` | Mutation | Đăng nhập | `GqlAuthGuard` |
-| `attendanceHistory(from?, to?)` | Query | Xem lịch sử chấm công (EMPLOYEE chỉ xem của mình, ADMIN xem toàn bộ) | `GqlAuthGuard`, `PoliciesGuard` |
-| `createRequest(input)` | Mutation | Tạo đơn xin chấm công ngoài | `GqlAuthGuard` |
-| `attendanceRequests(status?)` | Query | Xem đơn xin chấm công ngoài (EMPLOYEE chỉ của mình, ADMIN toàn bộ) | `GqlAuthGuard`, `PoliciesGuard` |
-| `approveRequest(requestId)` | Mutation | Phê duyệt đơn xin chấm công (quyền `update`) | `GqlAuthGuard`, `PoliciesGuard` |
-| `rejectRequest(requestId, note?)` | Mutation | Từ chối đơn xin chấm công | `GqlAuthGuard`, `PoliciesGuard` |
-| `trgMonthlyExport(input)` | Mutation | Trigger export báo cáo chấm công theo tháng (quyền `create`) | `GqlAuthGuard`, `PoliciesGuard` |
-| `getExportReport(exportId)` | Query | Xem trạng thái / thông tin của một export | `GqlAuthGuard`, `PoliciesGuard` |
+| `login` | `input: LoginInput!` | công khai | Đăng nhập → `accessToken` + user |
+| `createUser` | `input: CreateUserInput!` | JWT + create User | Tạo user mới |
+| `checkIn` | — | JWT | Check-in lần này (max 4/ngày, cách ≥ 5 phút, lock Redis fail-open) |
+| `createRequest` | `input: AttendanceRequestInput!` | JWT (+ throttle) | Tạo đơn xin chấm công bù |
+| `approveRequest` | `requestId: Int!` | JWT + update AttendanceRequest | Duyệt đơn (chỉ ADMIN) |
+| `rejectRequest` | `requestId: Int!, note: String` | JWT + update AttendanceRequest | Từ chối đơn (chỉ ADMIN) |
+| `softDeleteUser` | `userId: Int!` | JWT + delete User | Xóa mềm user (chỉ ADMIN) |
+| `reactiveUser` | `userId: Int!` | JWT + update User | Kích hoạt lại user |
+| `trgMonthlyExport` | `input: ExportMonthlyInput!` | JWT + create AttendanceReport (ADMIN, throttle) | Tạo job export tháng |
 
-## Luồng nghiệp vụ chính
+### Query
 
-### Chấm công thông thường
+| Query | Tham số | Guard / Policy | Mô tả |
+|---|---|---|---|
+| `showHistory` | `from: DateTime, to: DateTime` (tùy chọn) | JWT + read Attendance | Lịch sử chấm công (EMPLOYEE: của mình; ADMIN: tất cả) |
+| `showRequestList` | `status: RequestStatus` (tùy chọn) | JWT + read AttendanceRequest | Danh sách đơn (EMPLOYEE: của mình; ADMIN: tất cả / lọc theo trạng thái) |
+| `getExportReport` | `exportId: String!` | JWT + read AttendanceReport | Trạng thái + path của job export |
 
-User đăng nhập → `checkin()` → tạo `Attendance` `type = NORMAL` (`checkTime = now`).
 
-**Giới hạn khi chấm công (`checkin`):**
-- Tối đa **4 lần / ngày** cho cùng một user (tính theo ngày làm việc trong múi giờ nghiệp vụ).
-- Giữa 2 lần chấm liên tiếp phải cách nhau ít nhất **5 phút** (so với bản ghi gần nhất).
-- Giới hạn này chỉ áp cho `checkin` tay (`checkTime = now`). Các bản ghi `MANUAL` sinh ra từ approve không bị áp dụng giới hạn này.
+### Ví dụ
 
-### Xin chấm công ngoài
+```graphql
+# Login
+mutation {
+  login(input: { email: "admin@example.com", password: "secret" }) {
+    accessToken
+    user { id email fullName role }
+  }
+}
 
-User → `createRequest(input)` với `startTime`, `endTime`, `reason`
+# Check-in
+mutation { checkIn { id checkTime type } }
 
-→ Tạo `AttendanceRequest` với `status = PENDING`
+# Tạo đơn chấm công bù
+mutation {
+  createRequest(input: {
+    startTime: "2026-08-20T08:00:00.000Z"
+    endTime: "2026-08-20T10:00:00.000Z"
+    reason: "Quên quẹt thẻ"
+  }) { id status }
+}
 
-Validate đầu vào:
-- Bắt buộc `startTime < endTime`
-- Cùng ngày (theo múi giờ nghiệp vụ)
-- Toàn bộ `endTime` phải ở trong quá khứ  (không được xin bù cho tương lai)
-- **Chặn chồng lấn:** không được tạo đơn nếu trùng thời gian với một đơn `PENDING` hoặc `APPROVED` khác của cùng một user.
+# Duyệt đơn (ADMIN)
+mutation { approveRequest(requestId: 1) { id status } }
 
-User → `attendanceRequests(status: null)`
-→ Xem các đơn của chính mình (CASL tự lọc)
-→ Theo dõi trạng thái `PENDING / APPROVED / REJECTED`
+# Export tháng 7/2026 (ADMIN)
+mutation { trgMonthlyExport(input: { month: 7, year: 2026 }) }
 
-Admin → `attendanceRequests(status: PENDING)`
-→ Xem danh sách các đơn đang chờ duyệt
+# Xem lịch sử chấm công (kèm token)
+query { showHistory { id checkTime type } }
+```
 
-Admin → `approveRequest(requestId)` (trong transaction)
-1. Kiểm tra đơn tồn tại và đang ở trạng thái `PENDING`
-2. Xác nhận admin không duyệt chính đơn của mình
-3. `updateMany` đơn → `APPROVED`, gán `reviewBy` / `reviewAt`
-4. **Chặn chồng lấn khi duyệt:** kiểm tra không có đơn **đã APPROVED** khác của cùng user trùng thời gian với đơn này (tránh tạo trùng bản ghi)
-5. Tạo 2 bản ghi `Attendance`:
-   - `type = MANUAL`, `checkTime = startTime`
-   - `type = MANUAL`, `checkTime = endTime`
-6. Transaction commit thành công
-7. Bắn WebSocket event `requestApproved` tới đúng user
+---
 
-> Lưu ý: Một bản ghi chấm công `NORMAL` đã tồn tại trong khoảng thời gian của đơn **không** bị coi là xung đột — người dùng có thể đã chấm vào và xin bù giờ ra (như vậy trong ngày có 3 bản ghi, được chấp nhận).
+## Nghiệp vụ chính
 
-**— hoặc —**
+### Check-in (`checkIn`)
 
-Admin → `rejectRequest(requestId, note?)` (trong transaction)
-1. Kiểm tra đơn tồn tại và đang ở trạng thái `PENDING`
-2. `updateMany` đơn → `REJECTED`, gán `reviewBy` / `reviewAt`, và `note` (nếu có)
-3. Không tạo bản ghi `Attendance`
-4. Transaction commit thành công
-5. Bắn WebSocket event `requestRejected` tới đúng user
+- Tạo `Attendance` `type = NORMAL`, `checkTime = now`.
+- **Tối đa 4 lần/ngày** cho cùng user (tính theo ngày làm việc — múi giờ `Asia/Ho_Chi_Minh`).
+- **≥ 5 phút** giữa 2 lần check-in liên tiếp (so với bản ghi gần nhất).
+- Giới hạn này **chỉ áp cho `checkIn` tay** — record `MANUAL` sinh từ approve không bị áp dụng.
+- **Lock Redis** (`SET NX EX 3s` theo `checkin_lock:<userId>`) chống 2 request trùng nhau (double-click/retry) ghi 2 bản ghi cùng lúc. **Fail-open**: Redis lỗi → bỏ qua lock (có log), check-in vẫn chạy — nhất quán với rate limiter.
+
+### Đơn chấm công bù (`createRequest`)
+
+- Request `startTime < endTime`, cùng ngày, toàn bộ trong **quá khứ** (không xin bù tương lai).
+- **Chặn chồng lấn**: không tạo đơn nếu trùng thời gian với đơn **của chính user** đang `PENDING` hoặc `APPROVED`.
+
+### Duyệt / từ chối (`approveRequest` / `rejectRequest`)
+
+- Chỉ ADMIN; không duyệt chính đơn của mình; chỉ duyệt đơn đang `PENDING`.
+- **approve** (trong `$transaction`):
+  1. `updateMany` `PENDING → APPROVED` (kèm `reviewBy`/`reviewAt`) — check count để tránh duyệt trùng.
+  2. **Chặn chồng lấn khi duyệt**: không được có đơn **đã APPROVED** khác của cùng user trùng thời gian.
+  3. Tạo **2 record `Attendance` `MANUAL`**: `checkTime = startTime` và `checkTime = endTime`.
+  4. Bắn WebSocket `requestApproved` tới đúng user (trong try/catch — lỗi notify không làm fail transaction).
+- **reject**: đổi `PENDING → REJECTED` (+ `note`), **không** tạo attendance, bắn `requestRejected`.
+- Record `NORMAL` có sẵn trong khoảng của đơn **không bị coi là xung đột** (user có thể check-in rồi xin bù giờ ra).
+
+### Quản lý user (`softDeleteUser` / `reactiveUser`)
+
+- `softDeleteUser` — soft-delete qua `deletedAt`:
+  - **Không xóa được chính mình** (`userId === currentUserId` → Forbidden).
+  - **Không xóa admin cuối cùng** (count admin active ≤ 1 → BadRequest).
+  - Không xóa user không tồn tại / đã xóa → NotFound.
+- `reactiveUser` — đặt `deletedAt = null`.
 
 ---
 
 ## Thông báo Real-time (WebSocket)
 
-Khi đơn xin chấm công ngoài được duyệt / từ chối, user liên quan (nếu đang giữ kết nối WebSocket mở) nhận thông báo ngay lập tức, không cần chủ động gọi lại API.
-
-### Xác thực kết nối
-
-Kết nối WebSocket được xác thực bằng JWT ngay lúc handshake, gửi qua `auth.token`:
+**Kết nối** (xác thực JWT lúc handshake, server tự join room `user_<userId>` — client không tự chọn room):
 
 ```javascript
 const socket = io('http://localhost:3000', {
@@ -274,87 +284,63 @@ const socket = io('http://localhost:3000', {
 });
 ```
 
-Server tự giải mã token, lấy `userId` và tự động join client vào room riêng (`user_<userId>`) — client **không tự chọn** room, tránh giả mạo danh tính người khác.
-
-### Sự kiện phát ra
-
-| Sự kiện | Khi nào bắn | Payload |
+| Sự kiện | Khi nào | Payload |
 |---|---|---|
-| `requestApproved` | Sau khi `approveRequest` transaction thành công | `{ requestId, status, message }` |
-| `requestRejected` | Sau khi `rejectRequest` thành công | `{ requestId, status, message }` |
-
-Ngoài ra, luồng export (xem phần dưới) cũng bắn các sự kiện `exportCompleted` / `exportFailed` tới user trigger (hoặc admin nếu là cron).
-
-### Trạng thái
-
-- [x] Gateway xác thực JWT khi connect, tự động join room theo `userId`
-- [x] Tích hợp bắn sự kiện trong `approveRequest` / `rejectRequest`
-- [x] Test end-to-end đầy đủ qua Postman Socket.IO client
+| `requestApproved` | Sau khi duyệt đơn thành công | `{ requestId, status, message }` |
+| `requestRejected` | Sau khi từ chối đơn thành công | `{ requestId, status, message }` |
+| `exportCompleted` | Export xong | `{ exportId, month, year, message }` |
+| `exportFailed` | Export hết lượt retry vẫn fail | `{ exportId, month, year, reason }` |
 
 ---
 
-## Export Báo cáo Tháng
+## Export báo cáo tháng
 
-Hệ thống cho phép export lịch sử chấm công tháng thành file Excel (.xlsx) để báo cáo / lưu trữ.
+**Trigger:**
+- Thủ công (ADMIN): `trgMonthlyExport(input: { month, year })` → trả `exportId`.
+- Cron: mỗi **ngày 1 đầu tháng lúc 00:00** (TZ `Asia/Ho_Chi_Minh`) tự export **tháng trước**.
 
-### Cách dùng
+**Flow:**
+1. Service tạo `ExportJob` (`QUEUED`, `exportId = EXP-<uuid>`) + enqueue queue `export`.
+2. `ExportProcessor` — `PROCESSING` → truy vấn `Attendance` trong tháng (`monthStart ≤ t < nextMonthStart`, múi giờ nghiệp vụ) kèm `user.fullName` → gom theo `userId|ngày`.
+3. Tạo Excel, cột **`User ID | Full Name | Date | Check-in Count`**, ghi vào `exports/<month>-<year>/<exportId>.xlsx`.
+4. Cập nhật `DONE` + `path` (`/exports/<month>-<year>/<exportId>.xlsx`), bắn `exportCompleted`.
+5. **Lỗi:** BullMQ retry (3 lần, backoff) — chỉ set `FAILED` + notify `exportFailed` ở **lần thử cuối**; lỗi phụ trong khối notify không nuốt lỗi gốc.
+6. Client tra trạng thái qua `getExportReport(exportId)`.
 
-**Trigger export thủ công (Admin):**
-```graphql
-mutation {
-  trgMonthlyExport(input: { month: 8, year: 2026 })
-}
-```
+File được phục vụ tĩnh qua `app.useStaticAssets('./exports', { prefix: '/exports/' })` (main.ts).
 
-Response: `exportId` (ví dụ `EXP-a1b2c3d4-e5f6...`)
+> Redis **bắt buộc** — BullMQ cần Redis lưu job queue.
 
-**Tự động export tháng trước:**
-- Mỗi tháng (ngày 1 lúc 00:00), cron job tự động trigger export cho tháng trước
-- File được lưu tại: `exports/<month>-<year>/<exportId>.xlsx`
-- Ví dụ: `exports/7-2026/EXP-a1b2c3d4.xlsx` (báo cáo tháng 7 năm 2026)
+---
 
-### Chi tiết flow
+## Schema Database
 
-1. **Resolver** nhận request `trgMonthlyExport(input)` (quyền `create`, có throttle riêng)
-2. **Service** tạo bản ghi `ExportJob` (`status = QUEUED`) và thêm job vào queue BullMQ (kèm `exportId`)
-3. **Processor** (BullMQ Worker) xử lý job:
-   - Truy vấn tất cả `Attendance` trong tháng tương ứng theo **múi giờ nghiệp vụ `Asia/Ho_Chi_Minh`** (dùng `monthStart` / `nextMonthStart` trong `utils/date.util.ts`)
-   - Gom dữ liệu theo `userId + ngày làm việc` → xuất báo cáo **3 cột**: `User ID`, `Date`, `Check-in Count`
-   - Tạo workbook Excel, ghi file vào folder `exports/<month>-<year>/`
-4. Cập nhật `ExportJob` → `DONE` (`path`, `completedTime`) hoặc `FAILED` (kèm `reason`)
-5. Bắn notification `exportCompleted` / `exportFailed` tới người trigger (hoặc admin nếu cron)
-6. Job retry tối đa 3 lần nếu fail (backoff delay 5 giây)
-7. Client xem trạng thái / thông tin qua `getExportReport(exportId)`
+Xem chi tiết tại `prisma/schema.prisma`:
 
-### Yêu cầu cấu hình
+| Model | Ghi chú |
+|---|---|
+| `User` | `role` (ADMIN/EMPLOYEE), `deletedAt` (soft-delete), `email` unique, bcrypt hash |
+| `Attendance` | `checkTime`, `type` (NORMAL/MANUAL), optional `attendanceRequestId`; index `[userId, checkTime]` |
+| `AttendanceRequest` | `startTime`/`endTime`, `reason`, `status` (PENDING/APPROVED/REJECTED), `reviewBy`/`reviewAt`/`note`; index `[status]`, `[userId, status]` |
+| `ExportJob` | `exportId` unique, `exportMonth`/`exportYear`, `exportedBy?`, `status` (QUEUED/PROCESSING/DONE/FAILED), `path`, `completedTime`, `reason` |
 
-**Redis phải chạy** (để BullMQ lưu trữ job queue):
+---
+
+## Testing
 
 ```bash
-# Cục bộ
-redis-server
-
-# Hoặc dùng Docker
-docker run -d -p 6379:6379 redis:latest
+npm test                                   # toàn bộ unit test
+npm run test:cov                           # coverage
+TZ=UTC npx jest src/utils/date.util.spec.ts
+TZ=America/New_York npx jest src/utils/date.util.spec.ts
 ```
 
-**Biến môi trường (nếu cần):**
-```env
-REDIS_URL=redis://localhost:6379
-```
+> `date.util.spec.ts` chạy lại dưới nhiều TZ để đảm bảo code datetime **không phụ thuộc TZ máy host**.
 
 ---
 
-# Trạng thái hoàn thành
+## Lưu ý
 
-- [x] Đăng ký / Đăng nhập (JWT)
-- [x] Chấm công (giới hạn 4 lần/ngày, 5 phút giữa các lần)
-- [x] Xem lịch sử chấm công (filter theo thời gian, phân quyền theo role)
-- [x] Tạo đơn xin chấm công ngoài (chặn chồng lấn với đơn khác)
-- [x] Xem đơn xin chấm công ngoài (với CASL filtering)
-- [x] Admin xem danh sách đơn (filter theo trạng thái)
-- [x] Admin duyệt / từ chối đơn (chặn chồng lấn khi duyệt)
-- [x] Bắn sự kiện WebSocket khi duyệt / từ chối đơn
-- [x] Test end-to-end tính năng real-time
-- [x] Export báo cáo chấm công tháng (manual + auto cron, múi UTC+7, cột User / Date / Check-in Count)
-- [x] Seed tạo tài khoản ADMIN từ biến môi trường
+1. **Export file phục vụ công khai**: static `/exports/*` là Express middleware **ngoài hệ thống guard** (không qua JWT/CASL). `exportId` là UUID khó đoán nhưng không nên dựa vào đó — trước khi deploy production nên thay bằng endpoint xác thực (JWT + kiểm quyền) trước khi stream file.
+2. **`connectToRedis`** (Socket.IO adapter) tạo client ioredis và trả Promise ngay, không chờ Redis sẵn sàng — WebSocket vẫn khởi động khi Redis tắt (nhưng không dùng Redis adapter). Lock check-in + login rate-limit đã **fail-open** nên app không sập khi Redis down.
+3. **`dotenv`** được dùng trong `prisma.config.ts`/`prisma/seed.ts` nhưng không khai trực tiếp trong `package.json` (đến qua `@nestjs/config`); nếu gặp lỗi khi `npm ci` sạch → thêm `dotenv` vào devDependencies.

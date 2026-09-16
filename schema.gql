@@ -85,9 +85,9 @@ type Mutation {
   createRequest(input: AttendanceRequestInput!): AttendanceRequest!
   createUser(input: CreateUserInput!): User!
   login(input: LoginInput!): AuthResponse!
-  reactiveUser(userId: Float!): User!
+  reactiveUser(userId: Int!): User!
   rejectRequest(note: String, requestId: Int!): AttendanceRequest!
-  softDeleteUser(userId: Float!): User!
+  softDeleteUser(userId: Int!): User!
   trgMonthlyExport(input: ExportMonthlyInput!): String!
 }
 
